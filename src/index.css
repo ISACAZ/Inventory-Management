@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Roboto', sans-serif;
+    background-color: #F0EFEB;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #F0EFEB;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #C2CCD6;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #B294A0;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-lab-slate/20 p-6;
+  }
+
+  .btn-primary {
+    @apply bg-lab-mauve hover:bg-lab-mauve/90 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-150;
+  }
+
+  .btn-secondary {
+    @apply bg-lab-slate/30 hover:bg-lab-slate/50 text-gray-700 font-medium px-4 py-2 rounded-lg transition-colors duration-150;
+  }
+
+  .btn-sage {
+    @apply bg-lab-sage hover:bg-lab-sage/90 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-150;
+  }
+
+  .btn-amber {
+    @apply bg-lab-amber hover:bg-lab-amber/90 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-150;
+  }
+
+  .input-field {
+    @apply w-full border border-lab-slate/40 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-lab-mauve/40 focus:border-lab-mauve transition-all;
+  }
+
+  .section-title {
+    @apply text-lg font-semibold text-gray-800;
+  }
+
+  .label {
+    @apply text-sm text-gray-500;
+  }
+}
