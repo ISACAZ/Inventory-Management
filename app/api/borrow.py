@@ -4,8 +4,7 @@ from typing import Optional
 
 from app.api.deps import get_db, get_current_user
 from app.models.user import User
-from app.models.borrow import BorrowStatus
-from app.schemas.borrow import BorrowRequest, ReturnRequest, BorrowOut
+from app.schemas.borrow import BorrowRequest, ReturnRequest, BorrowOut, BorrowStatusEnum
 from app.services import borrow_service
 
 
@@ -38,7 +37,7 @@ def list_transactions(
     limit: int = 100,
     user_id: Optional[int] = None,
     item_id: Optional[int] = None,
-    status_filter: Optional[BorrowStatus] = None,
+    status_filter: Optional[BorrowStatusEnum] = None,
     db: Session = Depends(get_db),
     current: User = Depends(get_current_user),
 ) -> list[BorrowOut]:

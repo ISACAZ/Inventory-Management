@@ -1,8 +1,12 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.database import Base
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class Item(Base):
@@ -26,8 +30,8 @@ class Item(Base):
     location_id = Column(Integer, ForeignKey("locations.id"), nullable=True)
 
     is_active = Column(Boolean, nullable=False, default=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=_utcnow)
+    updated_at = Column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
 
     location = relationship("Location", back_populates="items")
     borrow_records = relationship("BorrowRecord", back_populates="item")

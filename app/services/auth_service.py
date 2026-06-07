@@ -6,17 +6,34 @@ from app.schemas.user import LoginRequest, CreateUser, LoginResponse, UserOut
 from app.core.security import hash_password, verify_password, create_access_token
 
 
-def authenticate(db: Session, body: LoginRequest) -> LoginResponse:
-    """Validate credentials and return a JWT + user payload."""
-    user = db.query(User).filter(User.email == body.email).first()
-    if not user or not verify_password(body.password, user.password):
+def _verify_credentials(db: Session, email: str, password: str) -> User:
+    """Shared credential check used by both JSON and OAuth2-form logins."""
+    user = db.query(User).filter(User.email == email).first()
+    if not user or not verify_password(password, user.password):
         # Generic message — don't leak whether the email exists.
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
+    return user
 
+
+def authenticate(db: Session, body: LoginRequest) -> LoginResponse:
+    """JSON login: returns access token + embedded user payload."""
+    user = _verify_credentials(db, body.email, body.password)
     token = create_access_token({"sub": str(user.id), "role": user.role.value})
     return LoginResponse(access_token=token, token_type="bearer", user=UserOut.model_validate(user))
+
+
+def authenticate_form(db: Session, username: str, password: str) -> dict:
+    """OAuth2 password-flow login (Swagger Authorize button).
+
+    `username` is the email — OAuth2PasswordRequestForm only exposes a `username`
+    field, so the frontend's JSON login is more ergonomic; this exists purely so
+    the docs UI works.
+    """
+    user = _verify_credentials(db, username, password)
+    token = create_access_token({"sub": str(user.id), "role": user.role.value})
+    return {"access_token": token, "token_type": "bearer"}
 
 
 def create_user(db: Session, body: CreateUser) -> User:

@@ -1,9 +1,13 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum as SAEnum
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import enum
 
 from app.database import Base
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class BorrowStatus(str, enum.Enum):
@@ -23,7 +27,7 @@ class BorrowRecord(Base):
     quantity = Column(Integer, nullable=False, default=1)
     status = Column(SAEnum(BorrowStatus), nullable=False, default=BorrowStatus.borrowed, index=True)
 
-    borrowed_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    borrowed_at = Column(DateTime, nullable=False, default=_utcnow)
     returned_at = Column(DateTime, nullable=True)
     note = Column(String(500), nullable=True)
 

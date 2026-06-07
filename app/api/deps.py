@@ -7,8 +7,10 @@ from app.core.security import decode_token
 from app.models.user import User, UserRoleEnum
 
 
-# tokenUrl points at our login endpoint so the Swagger "Authorize" button works.
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=True)
+# tokenUrl points at the OAuth2 form-data endpoint so Swagger's Authorize
+# button can exchange username/password for a bearer token. Frontend uses the
+# JSON /api/auth/login endpoint instead — both produce the same JWT.
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token", auto_error=True)
 
 
 def get_db():

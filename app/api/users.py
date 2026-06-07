@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_current_user, require_admin
-from app.models.user import User
+from app.models.user import User, UserRoleEnum
 from app.schemas.user import CreateUser, UserOut
 from app.services import auth_service
 
@@ -38,8 +38,7 @@ def get_user(
     current: User = Depends(get_current_user),
 ) -> UserOut:
     # Regular users may only view their own profile.
-    if current.role.value != "admin" and current.id != user_id:
-        from fastapi import HTTPException
+    if current.role != UserRoleEnum.admin and current.id != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     user = auth_service.get_user(db, user_id)
     return UserOut.model_validate(user)

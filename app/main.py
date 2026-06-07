@@ -39,7 +39,7 @@ app = FastAPI(title="Laboratory Inventory Management API", lifespan=lifespan)
 
 # Force every validation error into the project-standard {"detail": "..."} shape.
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     first = exc.errors()[0] if exc.errors() else {"msg": "Validation error"}
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -47,8 +47,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
-@app.get("/health", status_code=200)
-def get_health():
+@app.get("/health", status_code=status.HTTP_200_OK)
+def get_health() -> dict[str, str]:
     return {"status": "ok"}
 
 

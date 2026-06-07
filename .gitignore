@@ -18,5 +18,7 @@ __pycache__/
 .idea/
 
 # OS files
-.DS_Store        # Mac
-Thumbs.db        # Windows
+# Mac
+.DS_Store
+# Windows
+Thumbs.db

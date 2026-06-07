@@ -1,9 +1,13 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SAEnum
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import enum
 
 from app.database import Base
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class UserRoleEnum(str, enum.Enum):
@@ -20,7 +24,7 @@ class User(Base):
     full_name = Column(String(255), nullable=True)
     role = Column(SAEnum(UserRoleEnum), nullable=False, default=UserRoleEnum.user)
     is_active = Column(Boolean, nullable=False, default=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=_utcnow)
+    updated_at = Column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
 
     borrow_records = relationship("BorrowRecord", back_populates="user")

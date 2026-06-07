@@ -39,5 +39,6 @@ class LoginResponse(BaseModel):
 
 
 class Token(BaseModel):
+    """Standard OAuth2 token response (Swagger Authorize button)."""
     access_token: str
     token_type: str = "bearer"

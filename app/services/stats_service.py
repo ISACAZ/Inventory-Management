@@ -1,14 +1,14 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.models.item import Item
 from app.models.user import User
 from app.models.borrow import BorrowRecord, BorrowStatus
+from app.schemas.stats import SummaryOut, ItemUsageOut, StockMovementOut, LowStockOut
 
 
-def summary(db: Session) -> dict:
+def summary(db: Session) -> SummaryOut:
     """High-level dashboard counts."""
     total_items = db.query(func.count(Item.id)).filter(Item.is_active.is_(True)).scalar() or 0
     total_users = db.query(func.count(User.id)).filter(User.is_active.is_(True)).scalar() or 0
@@ -27,15 +27,15 @@ def summary(db: Session) -> dict:
         .scalar()
         or 0
     )
-    return {
-        "total_items": int(total_items),
-        "total_users": int(total_users),
-        "active_borrows": int(active_borrows),
-        "low_stock_items": int(low_stock_count),
-    }
+    return SummaryOut(
+        total_items=int(total_items),
+        total_users=int(total_users),
+        active_borrows=int(active_borrows),
+        low_stock_items=int(low_stock_count),
+    )
 
 
-def item_usage(db: Session, limit: int = 10) -> list[dict]:
+def item_usage(db: Session, limit: int = 10) -> list[ItemUsageOut]:
     """Most-borrowed items by transaction count (descending)."""
     rows = (
         db.query(
@@ -51,19 +51,19 @@ def item_usage(db: Session, limit: int = 10) -> list[dict]:
         .all()
     )
     return [
-        {
-            "item_id": r.id,
-            "name": r.name,
-            "borrow_count": int(r.borrow_count),
-            "total_quantity_borrowed": int(r.total_quantity_borrowed),
-        }
+        ItemUsageOut(
+            item_id=r.id,
+            name=r.name,
+            borrow_count=int(r.borrow_count),
+            total_quantity_borrowed=int(r.total_quantity_borrowed),
+        )
         for r in rows
     ]
 
 
-def stock_movement(db: Session, days: int = 30) -> list[dict]:
+def stock_movement(db: Session, days: int = 30) -> list[StockMovementOut]:
     """Day-by-day count of borrow vs. return events over the last N days."""
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
 
     borrows = (
         db.query(
@@ -84,6 +84,7 @@ def stock_movement(db: Session, days: int = 30) -> list[dict]:
         .all()
     )
 
+    # Merge both streams keyed by day; missing values default to 0.
     movement: dict[str, dict] = {}
     for row in borrows:
         key = str(row.day)
@@ -94,10 +95,10 @@ def stock_movement(db: Session, days: int = 30) -> list[dict]:
         movement.setdefault(key, {"date": key, "borrowed": 0, "returned": 0})
         movement[key]["returned"] = int(row.qty)
 
-    return sorted(movement.values(), key=lambda r: r["date"])
+    return [StockMovementOut(**v) for v in sorted(movement.values(), key=lambda r: r["date"])]
 
 
-def low_stock(db: Session) -> list[dict]:
+def low_stock(db: Session) -> list[LowStockOut]:
     """Items where available_quantity <= low_stock_threshold (StockAlert)."""
     items = (
         db.query(Item)
@@ -108,11 +109,11 @@ def low_stock(db: Session) -> list[dict]:
         .all()
     )
     return [
-        {
-            "item_id": i.id,
-            "name": i.name,
-            "available_quantity": i.available_quantity,
-            "low_stock_threshold": i.low_stock_threshold,
-        }
+        LowStockOut(
+            item_id=i.id,
+            name=i.name,
+            available_quantity=i.available_quantity,
+            low_stock_threshold=i.low_stock_threshold,
+        )
         for i in items
     ]
