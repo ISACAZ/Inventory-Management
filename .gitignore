@@ -1,6 +1,10 @@
 # Secrets
 .env
 
+# Node
+node_modules/
+dist/
+
 # Python virtual environment
 venv/
 .venv/
@@ -18,7 +22,6 @@ __pycache__/
 .idea/
 
 # OS files
-# Mac
 .DS_Store
-# Windows
 Thumbs.db
+*.local
