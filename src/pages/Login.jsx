@@ -2,15 +2,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import {
-  FlaskConical,
-  Mail,
-  Lock,
-  LogIn,
-  Loader2,
-  Eye,
-  EyeOff,
-} from "lucide-react";
+import { GoogleLogin } from "@react-oauth/google";
+import { FlaskConical, ShieldAlert, Loader2 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 
 const cardVariants = {
@@ -34,13 +27,8 @@ const itemVariants = {
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, isAuthenticated } = useAuth();
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const { loginWithGoogle, isAuthenticated } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState({});
 
   // Redirect if already authenticated
   if (isAuthenticated) {
@@ -48,36 +36,25 @@ export default function Login() {
     return null;
   }
 
-  function validateForm() {
-    const next = {};
-    if (!email.trim()) {
-      next.email = "Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      next.email = "Please enter a valid email address";
-    }
-    if (!password) {
-      next.password = "Password is required";
-    }
-    setErrors(next);
-    return Object.keys(next).length === 0;
-  }
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    if (!validateForm()) return;
-
+  async function handleGoogleSuccess(credentialResponse) {
     setIsLoading(true);
     try {
-      await login(email.trim(), password);
+      await loginWithGoogle(credentialResponse);
       toast.success("Signed in successfully");
       navigate("/", { replace: true });
     } catch (err) {
       toast.error("Login failed", {
-        description: err.message || "Please check your credentials.",
+        description: err.message || "Unable to sign in with Google.",
       });
     } finally {
       setIsLoading(false);
     }
+  }
+
+  function handleGoogleError() {
+    toast.error("Google Sign-In failed", {
+      description: "Please try again or use a different account.",
+    });
   }
 
   return (
@@ -85,7 +62,7 @@ export default function Login() {
       variants={cardVariants}
       initial="hidden"
       animate="visible"
-      className="w-full overflow-hidden rounded-lg border border-gray-100 bg-white shadow-elevated"
+      className="w-full max-w-md overflow-hidden rounded-lg border border-gray-100 bg-white shadow-elevated"
     >
       {/* Brand header */}
       <div className="flex flex-col items-center px-8 pt-8 pb-6">
@@ -112,127 +89,64 @@ export default function Login() {
         </motion.p>
       </div>
 
-      {/* Login form */}
-      <form onSubmit={handleSubmit} className="px-8 pb-8" noValidate>
-        {/* Email field */}
+      {/* Login section */}
+      <div className="px-8 pb-8">
+        {/* Domain restriction notice */}
         <motion.div
           variants={itemVariants}
           custom={2}
           initial="hidden"
           animate="visible"
-          className="mb-4"
+          className="mb-6 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4"
         >
-          <label htmlFor="email" className="label">
-            Email address
-          </label>
-          <div className="relative">
-            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
-              <Mail className="h-4 w-4 text-gray-400" />
-            </div>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                if (errors.email) setErrors((p) => ({ ...p, email: "" }));
-              }}
-              placeholder="you@university.edu"
-              autoComplete="email"
-              className={`input pl-10 ${errors.email ? "border-red-300 focus:border-red-400 focus:ring-red-100" : ""}`}
-              disabled={isLoading}
-            />
+          <ShieldAlert className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+          <div>
+            <p className="text-sm font-medium text-amber-800">
+              KMITL accounts only
+            </p>
+            <p className="mt-0.5 text-xs text-amber-600">
+              Only <strong>@kmitl.ac.th</strong> email addresses are permitted.
+              Please sign in with your university Google account.
+            </p>
           </div>
-          {errors.email && (
-            <motion.p
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-1.5 text-xs text-red-500"
-            >
-              {errors.email}
-            </motion.p>
-          )}
         </motion.div>
 
-        {/* Password field */}
+        {/* Google Sign-In button */}
         <motion.div
           variants={itemVariants}
           custom={3}
           initial="hidden"
           animate="visible"
-          className="mb-6"
+          className="flex justify-center"
         >
-          <label htmlFor="password" className="label">
-            Password
-          </label>
-          <div className="relative">
-            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
-              <Lock className="h-4 w-4 text-gray-400" />
+          {isLoading ? (
+            <div className="flex items-center gap-2 rounded-md border border-gray-200 px-6 py-3 text-sm text-gray-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Signing in...
             </div>
-            <input
-              id="password"
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (errors.password) setErrors((p) => ({ ...p, password: "" }));
-              }}
-              placeholder="Enter your password"
-              autoComplete="current-password"
-              className={`input pl-10 pr-10 ${errors.password ? "border-red-300 focus:border-red-400 focus:ring-red-100" : ""}`}
-              disabled={isLoading}
+          ) : (
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={handleGoogleError}
+              size="large"
+              shape="pill"
+              text="signin_with"
+              theme="outline"
+              width="320"
             />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-gray-400 hover:text-gray-600 transition-colors"
-              tabIndex={-1}
-              aria-label={showPassword ? "Hide password" : "Show password"}
-            >
-              {showPassword ? (
-                <EyeOff className="h-4 w-4" />
-              ) : (
-                <Eye className="h-4 w-4" />
-              )}
-            </button>
-          </div>
-          {errors.password && (
-            <motion.p
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-1.5 text-xs text-red-500"
-            >
-              {errors.password}
-            </motion.p>
           )}
         </motion.div>
 
-        {/* Sign In button */}
-        <motion.div
+        <motion.p
           variants={itemVariants}
-          custom={5}
+          custom={4}
           initial="hidden"
           animate="visible"
+          className="mt-6 text-center text-xs text-gray-400"
         >
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="btn btn-primary w-full"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Signing in...
-              </>
-            ) : (
-              <>
-                <LogIn className="h-4 w-4" />
-                Sign In
-              </>
-            )}
-          </button>
-        </motion.div>
-      </form>
+          By signing in, you agree to LabFlow&apos;s terms of service.
+        </motion.p>
+      </div>
     </motion.div>
   );
 }

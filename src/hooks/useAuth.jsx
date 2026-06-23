@@ -43,6 +43,17 @@ export function AuthProvider({ children }) {
     return true;
   }, []);
 
+  const loginWithGoogle = useCallback(async (credentialResponse) => {
+    const data = await authService.loginWithGoogle(credentialResponse);
+    const { access_token, user } = data;
+
+    localStorage.setItem("lab_token", access_token);
+    localStorage.setItem("lab_currentUser", JSON.stringify(user));
+    setToken(access_token);
+    setCurrentUser(user);
+    return true;
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem("lab_token");
     localStorage.removeItem("lab_currentUser");
@@ -56,6 +67,7 @@ export function AuthProvider({ children }) {
         currentUser,
         token,
         login,
+        loginWithGoogle,
         logout,
         isAuthenticated: !!currentUser,
         isLoading,
