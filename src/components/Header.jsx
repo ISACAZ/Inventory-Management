@@ -115,12 +115,16 @@ export default function Header({
     },
   ];
 
-  const userInitials = currentUser ? getInitials(currentUser.name) : "??";
-  const userName = currentUser ? currentUser.name : "Not signed in";
+  const userInitials = currentUser
+    ? getInitials(currentUser.full_name || currentUser.name || "")
+    : "??";
+  const userName = currentUser
+    ? currentUser.full_name || currentUser.name
+    : "Not signed in";
   const userEmail = currentUser ? currentUser.email : "signin@labflow.dev";
   const userRole = currentUser
-    ? currentUser.role.charAt(0).toUpperCase() +
-      currentUser.role.slice(1).replace("-", " ")
+    ? (currentUser.role || "").charAt(0).toUpperCase() +
+      (currentUser.role || "").slice(1).replace("-", " ")
     : "Guest";
 
   return (
@@ -298,7 +302,7 @@ export default function Header({
             {currentUser && currentUser.avatar ? (
               <img
                 src={currentUser.avatar}
-                alt={currentUser.name}
+                alt={currentUser.full_name || currentUser.name}
                 className="h-7 w-7 rounded-full object-cover"
               />
             ) : (
@@ -332,7 +336,7 @@ export default function Header({
                   {currentUser && currentUser.avatar ? (
                     <img
                       src={currentUser.avatar}
-                      alt={currentUser.name}
+                      alt={currentUser.full_name || currentUser.name}
                       className="h-9 w-9 rounded-full object-cover"
                     />
                   ) : (

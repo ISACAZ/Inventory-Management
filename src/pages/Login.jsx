@@ -10,40 +10,8 @@ import {
   Loader2,
   Eye,
   EyeOff,
-  ArrowRight,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
-
-const demoAccounts = [
-  {
-    role: "Admin",
-    email: "admin@labflow.edu",
-    userId: "USER-008",
-    color: "bg-primary-500",
-    iconBg: "bg-primary-50 text-primary-600",
-  },
-  {
-    role: "Professor",
-    email: "professor@labflow.edu",
-    userId: "USER-001",
-    color: "bg-accent-500",
-    iconBg: "bg-accent-50 text-accent-600",
-  },
-  {
-    role: "Student",
-    email: "student@labflow.edu",
-    userId: "USER-009",
-    color: "bg-secondary-400",
-    iconBg: "bg-secondary-50 text-secondary-600",
-  },
-  {
-    role: "Technician",
-    email: "tech@labflow.edu",
-    userId: "USER-004",
-    color: "bg-muted-400",
-    iconBg: "bg-muted-50 text-muted-600",
-  },
-];
 
 const cardVariants = {
   hidden: { opacity: 0, y: 24, scale: 0.97 },
@@ -51,10 +19,7 @@ const cardVariants = {
     opacity: 1,
     y: 0,
     scale: 1,
-    transition: {
-      duration: 0.45,
-      ease: [0.22, 1, 0.36, 1],
-    },
+    transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
   },
 };
 
@@ -63,17 +28,13 @@ const itemVariants = {
   visible: (i) => ({
     opacity: 1,
     y: 0,
-    transition: {
-      delay: 0.15 + i * 0.06,
-      duration: 0.35,
-      ease: "easeOut",
-    },
+    transition: { delay: 0.15 + i * 0.06, duration: 0.35, ease: "easeOut" },
   }),
 };
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -81,21 +42,22 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
+  // Redirect if already authenticated
+  if (isAuthenticated) {
+    navigate("/", { replace: true });
+    return null;
+  }
+
   function validateForm() {
     const next = {};
-
     if (!email.trim()) {
       next.email = "Email is required";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       next.email = "Please enter a valid email address";
     }
-
     if (!password) {
       next.password = "Password is required";
-    } else if (password.length < 6) {
-      next.password = "Password must be at least 6 characters";
     }
-
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -105,46 +67,17 @@ export default function Login() {
     if (!validateForm()) return;
 
     setIsLoading(true);
-
-    // Simulate auth delay
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
-    // For demo: accept any email that matches a demo account pattern,
-    // otherwise try a simple lookup or default to first user
-    const matched = demoAccounts.find(
-      (d) => d.email.toLowerCase() === email.toLowerCase().trim(),
-    );
-
-    if (matched) {
-      const success = login(matched.userId);
-      if (success) {
-        toast.success("Signed in successfully", {
-          description: `Welcome back, ${matched.role}`,
-        });
-        navigate("/", { replace: true });
-        return;
-      }
-    }
-
-    // Fallback: try login with the email as a lookup
-    // Since our auth system uses userId, try basic fallback
-    const fallbackSuccess = login("USER-001");
-    if (fallbackSuccess) {
+    try {
+      await login(email.trim(), password);
       toast.success("Signed in successfully");
       navigate("/", { replace: true });
-    } else {
-      toast.error("Authentication failed", {
-        description: "Please check your credentials and try again.",
+    } catch (err) {
+      toast.error("Login failed", {
+        description: err.message || "Please check your credentials.",
       });
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
-  }
-
-  function handleDemoClick(account) {
-    setEmail(account.email);
-    setPassword("password123");
-    setErrors({});
   }
 
   return (
@@ -180,7 +113,7 @@ export default function Login() {
       </div>
 
       {/* Login form */}
-      <form onSubmit={handleSubmit} className="px-8 pb-6" noValidate>
+      <form onSubmit={handleSubmit} className="px-8 pb-8" noValidate>
         {/* Email field */}
         <motion.div
           variants={itemVariants}
@@ -204,7 +137,7 @@ export default function Login() {
                 setEmail(e.target.value);
                 if (errors.email) setErrors((p) => ({ ...p, email: "" }));
               }}
-              placeholder="you@labflow.edu"
+              placeholder="you@university.edu"
               autoComplete="email"
               className={`input pl-10 ${errors.email ? "border-red-300 focus:border-red-400 focus:ring-red-100" : ""}`}
               disabled={isLoading}
@@ -227,7 +160,7 @@ export default function Login() {
           custom={3}
           initial="hidden"
           animate="visible"
-          className="mb-2"
+          className="mb-6"
         >
           <label htmlFor="password" className="label">
             Password
@@ -274,28 +207,6 @@ export default function Login() {
           )}
         </motion.div>
 
-        {/* Forgot password */}
-        <motion.div
-          variants={itemVariants}
-          custom={4}
-          initial="hidden"
-          animate="visible"
-          className="mb-6 text-right"
-        >
-          <button
-            type="button"
-            onClick={() =>
-              toast.info("Password reset", {
-                description:
-                  "In a production environment, this would send a reset link to your email.",
-              })
-            }
-            className="text-xs font-medium text-primary-600 hover:text-primary-700 transition-colors"
-          >
-            Forgot password?
-          </button>
-        </motion.div>
-
         {/* Sign In button */}
         <motion.div
           variants={itemVariants}
@@ -322,43 +233,6 @@ export default function Login() {
           </button>
         </motion.div>
       </form>
-
-      {/* Demo credentials section */}
-      <motion.div
-        variants={itemVariants}
-        custom={6}
-        initial="hidden"
-        animate="visible"
-        className="border-t border-gray-100 bg-gray-50/50 px-8 py-5"
-      >
-        <p className="mb-3 text-center text-xs font-medium uppercase tracking-wider text-gray-400">
-          Demo: Click any credential to auto-fill
-        </p>
-        <div className="grid grid-cols-2 gap-2">
-          {demoAccounts.map((account, idx) => (
-            <button
-              key={account.userId}
-              type="button"
-              onClick={() => handleDemoClick(account)}
-              className="group flex items-center gap-2.5 rounded-md border border-gray-200 bg-white px-3 py-2.5 text-left transition-all duration-200 hover:border-primary-200 hover:bg-primary-50/50 hover:shadow-soft"
-            >
-              <div
-                className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md ${account.iconBg}`}
-              >
-                <span className="text-xs font-bold">{account.role[0]}</span>
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-gray-700 group-hover:text-gray-900 transition-colors">
-                  {account.role}
-                </p>
-                <p className="truncate text-[11px] text-gray-400">
-                  {account.email}
-                </p>
-              </div>
-            </button>
-          ))}
-        </div>
-      </motion.div>
     </motion.div>
   );
 }

@@ -5,44 +5,61 @@ import {
   useCallback,
   useEffect,
 } from "react";
-import { users } from "../data/mockData";
+import { authService } from "../services/authService";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [currentUser, setCurrentUser] = useState(() => {
-    try {
-      const stored = localStorage.getItem("lab_currentUser");
-      return stored ? JSON.parse(stored) : users[0];
-    } catch {
-      return users[0];
-    }
-  });
+  const [currentUser, setCurrentUser] = useState(null);
+  const [token, setToken] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
+  // Restore auth from localStorage on mount
   useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem("lab_currentUser", JSON.stringify(currentUser));
+    try {
+      const storedToken = localStorage.getItem("lab_token");
+      const storedUser = localStorage.getItem("lab_currentUser");
+      if (storedToken && storedUser) {
+        setToken(storedToken);
+        setCurrentUser(JSON.parse(storedUser));
+      }
+    } catch {
+      // Clear corrupted data
+      localStorage.removeItem("lab_token");
+      localStorage.removeItem("lab_currentUser");
+    } finally {
+      setIsLoading(false);
     }
-  }, [currentUser]);
+  }, []);
 
-  const login = useCallback((userId) => {
-    const user = users.find((u) => u.id === userId);
-    if (user) {
-      setCurrentUser(user);
-      localStorage.setItem("lab_currentUser", JSON.stringify(user));
-      return true;
-    }
-    return false;
+  const login = useCallback(async (email, password) => {
+    const data = await authService.login(email, password);
+    const { access_token, user } = data;
+
+    localStorage.setItem("lab_token", access_token);
+    localStorage.setItem("lab_currentUser", JSON.stringify(user));
+    setToken(access_token);
+    setCurrentUser(user);
+    return true;
   }, []);
 
   const logout = useCallback(() => {
+    localStorage.removeItem("lab_token");
     localStorage.removeItem("lab_currentUser");
+    setToken(null);
     setCurrentUser(null);
   }, []);
 
   return (
     <AuthContext.Provider
-      value={{ currentUser, login, logout, isAuthenticated: !!currentUser }}
+      value={{
+        currentUser,
+        token,
+        login,
+        logout,
+        isAuthenticated: !!currentUser,
+        isLoading,
+      }}
     >
       {children}
     </AuthContext.Provider>

@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Search,
   ArrowLeftRight,
@@ -35,9 +36,10 @@ import {
   getConditionColor,
   truncate,
 } from "../lib/utils";
-import { items, transactions, users } from "../data/mockData";
 import { useAuth } from "../hooks/useAuth";
 import { toast } from "sonner";
+import { borrowService } from "../services/borrowService";
+import { itemService } from "../services/itemService";
 
 /* --- TABS --- */
 const TABS = [
@@ -152,7 +154,7 @@ function ConfirmDialog({
 }
 
 /* --- BORROW TAB --- */
-function BorrowTab({ currentUser }) {
+function BorrowTab({ currentUser, items, borrowMutation }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [showResults, setShowResults] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -162,7 +164,6 @@ function BorrowTab({ currentUser }) {
   const [professor, setProfessor] = useState("");
   const [expectedReturn, setExpectedReturn] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const searchRef = useRef(null);
 
   const availableItems = useMemo(() => {
@@ -171,15 +172,14 @@ function BorrowTab({ currentUser }) {
     return items
       .filter(
         (i) =>
-          i.status === "available" &&
-          i.availableQuantity > 0 &&
+          i.is_active &&
+          i.available_quantity > 0 &&
           (i.name.toLowerCase().includes(q) ||
             i.category.toLowerCase().includes(q) ||
-            i.id.toLowerCase().includes(q) ||
-            i.tags.some((t) => t.toLowerCase().includes(q))),
+            i.id.toLowerCase().includes(q)),
       )
       .slice(0, 8);
-  }, [searchQuery]);
+  }, [searchQuery, items]);
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -204,21 +204,21 @@ function BorrowTab({ currentUser }) {
   }
 
   function handleConfirmBorrow() {
-    setSubmitting(true);
-    setTimeout(() => {
-      setSubmitting(false);
-      setShowConfirm(false);
-      toast.success(`Successfully borrowed "${selectedItem.name}"`, {
-        description: `Return by ${formatDate(expectedReturn || new Date())}`,
-      });
-      setSelectedItem(null);
-      setSearchQuery("");
-      setQuantity(1);
-      setPurpose("");
-      setCourse("");
-      setProfessor("");
-      setExpectedReturn("");
-    }, 1000);
+    borrowMutation.mutate(
+      { item_id: selectedItem.id, quantity, note: purpose },
+      {
+        onSettled: () => {
+          setShowConfirm(false);
+          setSelectedItem(null);
+          setSearchQuery("");
+          setQuantity(1);
+          setPurpose("");
+          setCourse("");
+          setProfessor("");
+          setExpectedReturn("");
+        },
+      },
+    );
   }
 
   return (
@@ -284,7 +284,7 @@ function BorrowTab({ currentUser }) {
                         {item.name}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {item.category} · {item.availableQuantity} available
+                        {item.category} · {item.available_quantity} available
                       </p>
                     </div>
                     <span className={cn("badge", getStatusColor(item.status))}>
@@ -324,7 +324,7 @@ function BorrowTab({ currentUser }) {
                   <span
                     className={cn("badge", getStatusColor(selectedItem.status))}
                   >
-                    {selectedItem.availableQuantity} available
+                    {selectedItem.available_quantity} available
                   </span>
                   <span
                     className={cn(
@@ -366,17 +366,17 @@ function BorrowTab({ currentUser }) {
                       setQuantity(
                         Math.min(
                           Math.max(1, parseInt(e.target.value) || 1),
-                          selectedItem.availableQuantity,
+                          selectedItem.available_quantity,
                         ),
                       )
                     }
                     min={1}
-                    max={selectedItem.availableQuantity}
+                    max={selectedItem.available_quantity}
                   />
                   <button
                     onClick={() =>
                       setQuantity(
-                        Math.min(selectedItem.availableQuantity, quantity + 1),
+                        Math.min(selectedItem.available_quantity, quantity + 1),
                       )
                     }
                     className="h-11 w-11 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2"
@@ -384,7 +384,7 @@ function BorrowTab({ currentUser }) {
                     <ChevronRight className="h-4 w-4" />
                   </button>
                   <span className="text-xs text-gray-400">
-                    of {selectedItem.availableQuantity}
+                    of {selectedItem.available_quantity}
                   </span>
                 </div>
               </div>
@@ -436,7 +436,9 @@ function BorrowTab({ currentUser }) {
             <div className="mt-6 flex justify-end">
               <button
                 onClick={handleRequestBorrow}
-                disabled={!expectedReturn || !purpose.trim() || submitting}
+                disabled={
+                  !expectedReturn || !purpose.trim() || borrowMutation.isPending
+                }
                 className="btn btn-primary min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <ArrowLeftRight className="h-4 w-4" />
@@ -471,7 +473,9 @@ function BorrowTab({ currentUser }) {
             ? `You are about to borrow "${selectedItem.name}" (${quantity}x). Return by ${formatDate(expectedReturn)}.`
             : ""
         }
-        confirmLabel={submitting ? "Processing..." : "Confirm Borrow"}
+        confirmLabel={
+          borrowMutation.isPending ? "Processing..." : "Confirm Borrow"
+        }
         onConfirm={handleConfirmBorrow}
         onCancel={() => setShowConfirm(false)}
       />
@@ -479,8 +483,13 @@ function BorrowTab({ currentUser }) {
   );
 }
 
+/* --- ITEM HELPER: find item by id --- */
+function findItem(items, id) {
+  return items.find((i) => i.id === id) || null;
+}
+
 /* --- RETURN TAB --- */
-function ReturnTab({ currentUser }) {
+function ReturnTab({ currentUser, items, transactions, returnMutation }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [showResults, setShowResults] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
@@ -488,32 +497,26 @@ function ReturnTab({ currentUser }) {
   const [condition, setCondition] = useState("good");
   const [damageNotes, setDamageNotes] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const searchRef = useRef(null);
 
   const activeBorrows = useMemo(() => {
-    return transactions.filter(
-      (t) =>
-        t.userId === currentUser.id &&
-        t.status === "active" &&
-        t.type === "borrow",
-    );
-  }, [currentUser]);
+    return transactions.filter((t) => t.status === "borrowed");
+  }, [transactions]);
 
   const filteredBorrows = useMemo(() => {
     if (!searchQuery.trim()) return activeBorrows;
     const q = searchQuery.toLowerCase();
     return activeBorrows.filter((t) => {
-      const item = items.find((i) => i.id === t.itemId);
+      const item = findItem(items, t.item_id);
       return (
         item &&
         (item.name.toLowerCase().includes(q) ||
           item.id.toLowerCase().includes(q) ||
           item.category.toLowerCase().includes(q) ||
-          (t.purpose && t.purpose.toLowerCase().includes(q)))
+          (t.note && t.note.toLowerCase().includes(q)))
       );
     });
-  }, [activeBorrows, searchQuery]);
+  }, [activeBorrows, searchQuery, items]);
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -526,7 +529,7 @@ function ReturnTab({ currentUser }) {
   }, []);
 
   function handleSelectBorrow(txn) {
-    const item = items.find((i) => i.id === txn.itemId);
+    const item = findItem(items, txn.item_id);
     setSelectedTransaction(txn);
     setSelectedItem(item);
     setShowResults(false);
@@ -536,19 +539,19 @@ function ReturnTab({ currentUser }) {
   }
 
   function handleConfirmReturn() {
-    setSubmitting(true);
-    setTimeout(() => {
-      setSubmitting(false);
-      setShowConfirm(false);
-      toast.success(`Successfully returned "${selectedItem?.name || "item"}"`, {
-        description: `Condition: ${condition}`,
-      });
-      setSelectedTransaction(null);
-      setSelectedItem(null);
-      setSearchQuery("");
-      setCondition("good");
-      setDamageNotes("");
-    }, 1000);
+    returnMutation.mutate(
+      { borrow_id: selectedTransaction.id, note: damageNotes },
+      {
+        onSettled: () => {
+          setShowConfirm(false);
+          setSelectedTransaction(null);
+          setSelectedItem(null);
+          setSearchQuery("");
+          setCondition("good");
+          setDamageNotes("");
+        },
+      },
+    );
   }
 
   if (activeBorrows.length === 0 && !searchQuery) {
@@ -607,7 +610,7 @@ function ReturnTab({ currentUser }) {
                 </div>
               ) : (
                 filteredBorrows.map((txn) => {
-                  const item = items.find((i) => i.id === txn.itemId);
+                  const item = findItem(items, txn.item_id);
                   return (
                     <button
                       key={txn.id}
@@ -624,8 +627,7 @@ function ReturnTab({ currentUser }) {
                           {item?.name || "Unknown Item"}
                         </p>
                         <p className="text-xs text-gray-500">
-                          Borrowed {formatDate(txn.borrowDate)} · Due{" "}
-                          {formatDate(txn.expectedReturn)}
+                          Borrowed {formatDate(txn.borrowed_at)}
                         </p>
                       </div>
                       <Clock className="h-4 w-4 text-amber-500 flex-shrink-0" />
@@ -674,14 +676,12 @@ function ReturnTab({ currentUser }) {
                   <div>
                     <span className="text-gray-400">Borrowed</span>
                     <p className="text-gray-700">
-                      {formatDate(selectedTransaction.borrowDate)}
+                      {formatDate(selectedTransaction.borrowed_at)}
                     </p>
                   </div>
                   <div>
                     <span className="text-gray-400">Due Date</span>
-                    <p className="text-gray-700">
-                      {formatDate(selectedTransaction.expectedReturn)}
-                    </p>
+                    <p className="text-gray-700">&mdash;</p>
                   </div>
                   <div>
                     <span className="text-gray-400">Quantity</span>
@@ -692,17 +692,9 @@ function ReturnTab({ currentUser }) {
                   <div>
                     <span className="text-gray-400">Purpose</span>
                     <p className="text-gray-700 truncate">
-                      {selectedTransaction.purpose || "—"}
+                      {selectedTransaction.note || "—"}
                     </p>
                   </div>
-                  {selectedTransaction.course && (
-                    <div className="col-span-2">
-                      <span className="text-gray-400">Course</span>
-                      <p className="text-gray-700">
-                        {selectedTransaction.course}
-                      </p>
-                    </div>
-                  )}
                 </div>
               </div>
               <button
@@ -770,7 +762,7 @@ function ReturnTab({ currentUser }) {
             <div className="mt-6 flex justify-end">
               <button
                 onClick={() => setShowConfirm(true)}
-                disabled={submitting}
+                disabled={returnMutation.isPending}
                 className="btn btn-primary min-h-[44px] disabled:opacity-50"
               >
                 <CheckCircle className="h-4 w-4" />
@@ -780,24 +772,35 @@ function ReturnTab({ currentUser }) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Confirmation Dialog */}
+      <ConfirmDialog
+        open={showConfirm}
+        title="Confirm Return"
+        message={
+          selectedItem
+            ? `You are about to return "${selectedItem.name}". Condition: ${condition}.`
+            : ""
+        }
+        confirmLabel={
+          returnMutation.isPending ? "Processing..." : "Confirm Return"
+        }
+        onConfirm={handleConfirmReturn}
+        onCancel={() => setShowConfirm(false)}
+      />
     </div>
   );
 }
 
 /* --- MY ITEMS TAB --- */
-function MyItemsTab({ currentUser }) {
-  const myTransactions = useMemo(() => {
+function MyItemsTab({ currentUser, items, transactions }) {
+  const myItems = useMemo(() => {
     return transactions
-      .filter(
-        (t) =>
-          t.userId === currentUser.id &&
-          t.status === "active" &&
-          t.type === "borrow",
-      )
-      .sort((a, b) => new Date(a.expectedReturn) - new Date(b.expectedReturn));
-  }, [currentUser]);
+      .filter((t) => t.status === "borrowed")
+      .sort((a, b) => new Date(b.borrowed_at) - new Date(a.borrowed_at));
+  }, [transactions]);
 
-  if (myTransactions.length === 0) {
+  if (myItems.length === 0) {
     return (
       <EmptyState
         icon={Package}
@@ -820,9 +823,11 @@ function MyItemsTab({ currentUser }) {
 
       {/* Table body */}
       <div className="divide-y divide-gray-50">
-        {myTransactions.map((txn) => {
-          const item = items.find((i) => i.id === txn.itemId);
-          const isOverdue = new Date(txn.expectedReturn) < new Date();
+        {myItems.map((txn) => {
+          const item = findItem(items, txn.item_id);
+          const isOverdue =
+            new Date(txn.borrowed_at) <
+            new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
           return (
             <motion.div
               key={txn.id}
@@ -852,7 +857,7 @@ function MyItemsTab({ currentUser }) {
                 <span className="sm:hidden text-xs text-gray-400 mr-1">
                   Borrowed:{" "}
                 </span>
-                {formatDate(txn.borrowDate)}
+                {formatDate(txn.borrowed_at)}
               </div>
 
               <div className="sm:col-span-2 text-sm">
@@ -860,7 +865,7 @@ function MyItemsTab({ currentUser }) {
                   Due:{" "}
                 </span>
                 <span className={cn(isOverdue && "text-red-600 font-medium")}>
-                  {formatDate(txn.expectedReturn)}
+                  &mdash;
                 </span>
               </div>
 
@@ -868,7 +873,7 @@ function MyItemsTab({ currentUser }) {
                 <span className="sm:hidden text-xs text-gray-400 mr-1">
                   Purpose:{" "}
                 </span>
-                {truncate(txn.purpose || "—", 20)}
+                {truncate(txn.note || "—", 20)}
               </div>
 
               <div className="sm:col-span-2">
@@ -890,18 +895,16 @@ function MyItemsTab({ currentUser }) {
 }
 
 /* --- OVERDUE TAB --- */
-function OverdueTab({ currentUser }) {
+function OverdueTab({ currentUser, items, transactions }) {
   const overdueItems = useMemo(() => {
-    const now = new Date();
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
     return transactions
       .filter(
         (t) =>
-          t.userId === currentUser.id &&
-          (t.status === "overdue" ||
-            (t.status === "active" && new Date(t.expectedReturn) < now)),
+          t.status === "borrowed" && new Date(t.borrowed_at) < fourteenDaysAgo,
       )
-      .sort((a, b) => new Date(a.expectedReturn) - new Date(b.expectedReturn));
-  }, [currentUser]);
+      .sort((a, b) => new Date(a.borrowed_at) - new Date(b.borrowed_at));
+  }, [transactions]);
 
   if (overdueItems.length === 0) {
     return (
@@ -930,12 +933,13 @@ function OverdueTab({ currentUser }) {
       </div>
 
       {overdueItems.map((txn) => {
-        const item = items.find((i) => i.id === txn.itemId);
+        const item = findItem(items, txn.item_id);
         const daysOverdue = Math.max(
           1,
           Math.ceil(
-            (new Date() - new Date(txn.expectedReturn)) / (1000 * 60 * 60 * 24),
-          ),
+            (Date.now() - new Date(txn.borrowed_at).getTime()) /
+              (1000 * 60 * 60 * 24),
+          ) - 14,
         );
         return (
           <motion.div
@@ -971,20 +975,23 @@ function OverdueTab({ currentUser }) {
                   <div>
                     <span className="text-gray-400">Borrowed</span>
                     <p className="text-gray-600">
-                      {formatDate(txn.borrowDate)}
+                      {formatDate(txn.borrowed_at)}
                     </p>
                   </div>
                   <div>
                     <span className="text-gray-400">Was Due</span>
                     <p className="text-red-600 font-medium">
-                      {formatDate(txn.expectedReturn)}
+                      {formatDate(
+                        new Date(
+                          new Date(txn.borrowed_at).getTime() +
+                            14 * 24 * 60 * 60 * 1000,
+                        ),
+                      )}
                     </p>
                   </div>
                   <div className="col-span-2">
                     <span className="text-gray-400">Purpose</span>
-                    <p className="text-gray-600 truncate">
-                      {txn.purpose || "—"}
-                    </p>
+                    <p className="text-gray-600 truncate">{txn.note || "—"}</p>
                   </div>
                 </div>
               </div>
@@ -999,19 +1006,73 @@ function OverdueTab({ currentUser }) {
 /* --- MAIN PAGE --- */
 export default function BorrowReturn() {
   const [activeTab, setActiveTab] = useState("borrow");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const { currentUser } = useAuth();
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    try {
-      const timer = setTimeout(() => setLoading(false), 600);
-      return () => clearTimeout(timer);
-    } catch (err) {
-      setError(err.message);
-      setLoading(false);
-    }
-  }, []);
+  const {
+    data: rawItems = [],
+    isLoading: itemsLoading,
+    isError: itemsError,
+    error: itemsErr,
+  } = useQuery({
+    queryKey: ["items"],
+    queryFn: () => itemService.listItems({ limit: 200 }),
+  });
+
+  const {
+    data: myTransactions = [],
+    isLoading: txnsLoading,
+    isError: txnsError,
+    error: txnsErr,
+  } = useQuery({
+    queryKey: ["transactions", currentUser?.id],
+    queryFn: () =>
+      borrowService.listTransactions({
+        user_id: currentUser?.id,
+        limit: 100,
+      }),
+    enabled: !!currentUser?.id,
+  });
+
+  const items = useMemo(() => {
+    return rawItems.map((item) => ({
+      ...item,
+      image: `https://picsum.photos/seed/${item.id}/400/300`,
+      status: item.is_active
+        ? item.available_quantity > 0
+          ? "available"
+          : "unavailable"
+        : "retired",
+      condition: "good",
+    }));
+  }, [rawItems]);
+
+  const borrowMutation = useMutation({
+    mutationFn: borrowService.borrow,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["items"] });
+      toast.success("Item borrowed successfully");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const returnMutation = useMutation({
+    mutationFn: borrowService.returnItem,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["items"] });
+      toast.success("Item returned successfully");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const loading = itemsLoading || txnsLoading;
+  const error = itemsError
+    ? itemsErr?.message
+    : txnsError
+      ? txnsErr?.message
+      : null;
 
   const ActiveComponent = {
     borrow: BorrowTab,
@@ -1084,18 +1145,22 @@ export default function BorrowReturn() {
           <ErrorState
             message={error}
             onRetry={() => {
-              setError(null);
-              setLoading(true);
-              setTimeout(() => setLoading(false), 600);
+              queryClient.invalidateQueries({ queryKey: ["items"] });
+              queryClient.invalidateQueries({ queryKey: ["transactions"] });
             }}
           />
         ) : (
-          <ActiveComponent currentUser={currentUser} />
+          <ActiveComponent
+            currentUser={currentUser}
+            items={items}
+            transactions={myTransactions}
+            borrowMutation={borrowMutation}
+            returnMutation={returnMutation}
+          />
         )}
 
-        {/* Confirm Return Dialog (for Return tab) */}
         <AnimatePresence>
-          {/* Note: Return tab's ConfirmDialog is rendered inside the tab component itself */}
+          {/* Note: tabs' ConfirmDialogs are rendered inside the tab components themselves */}
         </AnimatePresence>
       </div>
     </PageTransition>

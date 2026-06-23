@@ -21,6 +21,7 @@ import {
   GripVertical,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import PageTransition from "../components/PageTransition";
 import {
   cn,
@@ -30,18 +31,11 @@ import {
   getConditionColor,
   truncate,
 } from "../lib/utils";
-import {
-  items,
-  categories,
-  locationsList,
-  statuses,
-  conditions,
-} from "../data/mockData";
+import { itemService } from "../services/itemService";
+import { locationService } from "../services/locationService";
 
-const locationMap = {};
-locationsList.forEach((l) => {
-  locationMap[l.id] = l.name;
-});
+const statuses = ["All Statuses", "Available", "Borrowed", "Retired"];
+const conditions = ["All Conditions", "Excellent", "Good", "Fair", "Poor"];
 
 const ITEMS_PER_PAGE = 12;
 
@@ -54,7 +48,6 @@ function Badge({ children, className }) {
 }
 
 export default function Inventory() {
-  const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState("grid");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -70,10 +63,19 @@ export default function Inventory() {
   const debounceRef = useRef(null);
   const [showFilters, setShowFilters] = useState(false);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 600);
-    return () => clearTimeout(timer);
-  }, []);
+  const {
+    data: apiItems = [],
+    isLoading: itemsLoading,
+    isError: itemsError,
+  } = useQuery({
+    queryKey: ["items"],
+    queryFn: () => itemService.listItems({ limit: 200 }),
+  });
+
+  const { data: locationList = [] } = useQuery({
+    queryKey: ["locations"],
+    queryFn: locationService.listLocations,
+  });
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -81,8 +83,54 @@ export default function Inventory() {
     return () => clearTimeout(debounceRef.current);
   }, [search]);
 
+  const enrichedItems = useMemo(
+    () =>
+      apiItems.map((item) => ({
+        ...item,
+        quantity: item.total_quantity,
+        availableQuantity: item.available_quantity,
+        image: `https://picsum.photos/seed/${item.id}/400/300`,
+        qrCode: `QR-${item.id}`,
+        value: 0,
+        borrowCount: 0,
+        brand: "",
+        model: "",
+        subcategory: item.category,
+        serialNumber: "",
+        favorite: false,
+        tags: item.category ? [item.category] : [],
+        status: !item.is_active
+          ? "retired"
+          : item.available_quantity > 0
+            ? "available"
+            : "borrowed",
+        condition: "good",
+        specs: {},
+        purchaseDate: item.created_at,
+        lastMaintenance: null,
+        nextMaintenance: null,
+        description: item.description || "",
+        locationId: item.location_id,
+        createdAt: item.created_at,
+      })),
+    [apiItems],
+  );
+
+  const categories = useMemo(
+    () => [...new Set(apiItems.map((i) => i.category).filter(Boolean))],
+    [apiItems],
+  );
+
+  const locationMap = useMemo(() => {
+    const map = {};
+    locationList.forEach((l) => {
+      map[l.id] = l.name;
+    });
+    return map;
+  }, [locationList]);
+
   const filteredItems = useMemo(() => {
-    let result = [...items].filter((item) => item.status !== "retired");
+    let result = [...enrichedItems].filter((item) => item.status !== "retired");
 
     if (debouncedSearch) {
       const q = debouncedSearch.toLowerCase();
@@ -141,6 +189,7 @@ export default function Inventory() {
 
     return result;
   }, [
+    enrichedItems,
     debouncedSearch,
     categoryFilter,
     locationFilter,
@@ -148,6 +197,7 @@ export default function Inventory() {
     conditionFilter,
     sortBy,
     sortDir,
+    locationMap,
   ]);
 
   const totalPages = Math.ceil(filteredItems.length / ITEMS_PER_PAGE);
@@ -211,7 +261,7 @@ export default function Inventory() {
     conditionFilter !== "All Conditions" ||
     debouncedSearch !== "";
 
-  if (loading) {
+  if (itemsLoading) {
     return (
       <PageTransition>
         <div className="space-y-6">
@@ -233,6 +283,22 @@ export default function Inventory() {
               <Skeleton key={i} className="h-64 rounded-lg" />
             ))}
           </div>
+        </div>
+      </PageTransition>
+    );
+  }
+
+  if (itemsError) {
+    return (
+      <PageTransition>
+        <div className="card text-center py-20">
+          <Package className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-600">
+            Failed to Load Inventory
+          </h2>
+          <p className="text-sm text-gray-400 mt-1">
+            Could not fetch items from the server. Please try again later.
+          </p>
         </div>
       </PageTransition>
     );
@@ -359,6 +425,7 @@ export default function Inventory() {
                       }}
                       className="input"
                     >
+                      <option value="All Categories">All Categories</option>
                       {categories.map((c) => (
                         <option key={c} value={c}>
                           {c}
@@ -376,7 +443,8 @@ export default function Inventory() {
                       }}
                       className="input"
                     >
-                      {locationsList.map((l) => (
+                      <option value="All Locations">All Locations</option>
+                      {locationList.map((l) => (
                         <option key={l.id} value={l.name}>
                           {l.name}
                         </option>

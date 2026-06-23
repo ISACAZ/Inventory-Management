@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   TrendingUp,
@@ -29,6 +29,7 @@ import {
   LineChart,
   Line,
 } from "recharts";
+import { useQuery } from "@tanstack/react-query";
 import PageTransition from "../components/PageTransition";
 import {
   cn,
@@ -39,13 +40,8 @@ import {
   getConditionColor,
   truncate,
 } from "../lib/utils";
-import {
-  monthlyBorrowStats,
-  categoryDistribution,
-  departmentUsage,
-  popularItems,
-  items,
-} from "../data/mockData";
+import { statsService } from "../services/statsService";
+import { itemService } from "../services/itemService";
 
 /* --- CONSTANTS --- */
 const CHART_COLORS = [
@@ -402,14 +398,11 @@ function DepartmentUsageChart({ data }) {
 function MostBorrowedChart({ data }) {
   const chartData = useMemo(() => {
     return data
-      .map((p) => {
-        const item = items.find((i) => i.id === p.itemId);
-        return {
-          name: item ? truncate(item.name, 28) : p.itemId,
-          count: p.borrowCount,
-          fullName: item?.name || p.itemId,
-        };
-      })
+      .map((p) => ({
+        name: truncate(p.name || "Item #" + p.itemId, 28),
+        count: p.borrowCount,
+        fullName: p.name || "Item #" + p.itemId,
+      }))
       .sort((a, b) => b.count - a.count);
   }, [data]);
 
@@ -459,49 +452,96 @@ function MostBorrowedChart({ data }) {
 
 /* --- MAIN PAGE --- */
 export default function Analytics() {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [timeRange, setTimeRange] = useState("30d");
 
-  useEffect(() => {
-    try {
-      const timer = setTimeout(() => setLoading(false), 700);
-      return () => clearTimeout(timer);
-    } catch (err) {
-      setError(err.message);
-      setLoading(false);
-    }
-  }, []);
+  const {
+    data: stockMovement,
+    isLoading: smLoading,
+    error: smError,
+  } = useQuery({
+    queryKey: ["stats-stockmovement", 365],
+    queryFn: () => statsService.getStockMovement(365),
+  });
 
-  // Compute stats
+  const {
+    data: itemUsage,
+    isLoading: iuLoading,
+    error: iuError,
+  } = useQuery({
+    queryKey: ["stats-itemusage"],
+    queryFn: () => statsService.getItemUsage(10),
+  });
+
+  const {
+    data: itemsList,
+    isLoading: ilLoading,
+    error: ilError,
+  } = useQuery({
+    queryKey: ["items-list"],
+    queryFn: () => itemService.listItems({ limit: 200 }),
+  });
+
+  const isLoading = smLoading || iuLoading || ilLoading;
+  const hasError = smError || iuError || ilError;
+
+  // Compute stats from stockMovement
   const stats = useMemo(() => {
-    const totalBorrows = monthlyBorrowStats.reduce((s, m) => s + m.borrows, 0);
-    const totalReturns = monthlyBorrowStats.reduce((s, m) => s + m.returns, 0);
-    const totalDamage = monthlyBorrowStats.reduce((s, m) => s + m.damage, 0);
+    const movement = stockMovement || [];
+    const totalBorrows = movement.reduce((s, m) => s + m.borrowed, 0);
+    const totalReturns = movement.reduce((s, m) => s + m.returned, 0);
 
     const returnRate =
       totalBorrows > 0 ? Math.round((totalReturns / totalBorrows) * 100) : 0;
-    const damageRate =
-      totalReturns > 0 ? Math.round((totalDamage / totalReturns) * 100) : 0;
-    const avgDuration = "3.2 days";
 
     return {
       totalBorrows,
       totalReturns,
       returnRate,
-      damageRate,
-      avgDuration,
+      damageRate: 0,
+      avgDuration: "3.2 days",
     };
-  }, []);
+  }, [stockMovement]);
 
-  // Filter stats based on time range
+  // Filter stock movement based on time range
   const filteredMonthlyStats = useMemo(() => {
-    const ranges = { "7d": 1, "30d": 3, "90d": 6, "1y": 12 };
-    const count = ranges[timeRange] || 12;
-    return monthlyBorrowStats.slice(-count);
-  }, [timeRange]);
+    const movement = stockMovement || [];
+    const countMap = { "7d": 7, "30d": 30, "90d": 90, "1y": 365 };
+    const count = countMap[timeRange] || 30;
+    return movement.slice(-count).map((s) => ({
+      month: s.date,
+      borrows: s.borrowed,
+      returns: s.returned,
+    }));
+  }, [stockMovement, timeRange]);
 
-  if (loading) {
+  // Derive category distribution from items list
+  const categoryDistribution = useMemo(() => {
+    if (!itemsList || itemsList.length === 0) return [];
+    const counts = {};
+    itemsList.forEach((item) => {
+      const cat = item.category || "Uncategorized";
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [itemsList]);
+
+  // Map item usage for MostBorrowedChart
+  const popularItems = useMemo(
+    () =>
+      (itemUsage || []).map((u) => ({
+        itemId: u.item_id,
+        name: u.name,
+        borrowCount: u.borrow_count,
+      })),
+    [itemUsage],
+  );
+
+  // Department usage — no backend endpoint yet
+  const departmentUsage = [];
+
+  if (isLoading) {
     return (
       <PageTransition>
         <div className="page-container">
@@ -521,7 +561,8 @@ export default function Analytics() {
     );
   }
 
-  if (error) {
+  if (hasError) {
+    const error = smError || iuError || ilError;
     return (
       <PageTransition>
         <div className="page-container">
@@ -539,13 +580,11 @@ export default function Analytics() {
             <h3 className="text-base font-semibold text-gray-700">
               Failed to load analytics
             </h3>
-            <p className="mt-1 text-sm text-gray-400">{error}</p>
+            <p className="mt-1 text-sm text-gray-400">
+              {error?.message || "An error occurred"}
+            </p>
             <button
-              onClick={() => {
-                setError(null);
-                setLoading(true);
-                setTimeout(() => setLoading(false), 700);
-              }}
+              onClick={() => window.location.reload()}
               className="btn btn-outline mt-4 min-h-[44px]"
             >
               <RefreshCw className="h-4 w-4" />
@@ -596,7 +635,7 @@ export default function Analytics() {
             icon={ArrowLeftRight}
             label="Total Borrows"
             value={stats.totalBorrows.toLocaleString()}
-            subtext={`${filteredMonthlyStats.length} months`}
+            subtext={`${filteredMonthlyStats.length} entries`}
             colorClass="bg-primary-50 text-primary-600"
             delay={0}
           />

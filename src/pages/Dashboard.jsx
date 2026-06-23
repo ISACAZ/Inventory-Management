@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -22,6 +22,8 @@ import {
   ArrowUp,
   ArrowDown,
   Minus,
+  ShieldAlert,
+  RefreshCw,
 } from "lucide-react";
 import {
   PieChart,
@@ -35,21 +37,12 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts";
+import { useQuery } from "@tanstack/react-query";
 import PageTransition from "../components/PageTransition";
 import { cn, formatDate, formatRelative, getStatusColor } from "../lib/utils";
-import {
-  stats,
-  transactions,
-  lowStockItems,
-  maintenanceRecords,
-  popularEquipment,
-  upcomingReturns,
-  announcements,
-  categoryDistribution,
-  monthlyBorrowStats,
-  users,
-  items,
-} from "../data/mockData";
+import { statsService } from "../services/statsService";
+import { borrowService } from "../services/borrowService";
+import { useAuth } from "../hooks/useAuth";
 
 const DONUT_COLORS = [
   "#7C8D7D",
@@ -141,67 +134,127 @@ const actionButtons = [
   },
 ];
 
+const announcements = [];
+
 export default function Dashboard() {
-  const [loading, setLoading] = useState(true);
+  const { currentUser } = useAuth();
 
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 600);
-    return () => clearTimeout(timer);
-  }, []);
+  // --- Queries ---
+  const {
+    data: summary,
+    isLoading: summaryLoading,
+    error: summaryError,
+  } = useQuery({
+    queryKey: ["stats-summary"],
+    queryFn: statsService.getSummary,
+  });
 
-  // Build lookup maps
-  const userMap = useMemo(() => {
-    const map = {};
-    users.forEach((u) => {
-      map[u.id] = u;
-    });
-    return map;
-  }, []);
+  const {
+    data: recentTxns,
+    isLoading: txnsLoading,
+    error: txnsError,
+  } = useQuery({
+    queryKey: ["transactions-recent"],
+    queryFn: () => borrowService.listTransactions({ limit: 10 }),
+  });
 
-  const itemMap = useMemo(() => {
-    const map = {};
-    items.forEach((i) => {
-      map[i.id] = i;
-    });
-    return map;
-  }, []);
+  const {
+    data: lowStock,
+    isLoading: lsLoading,
+    error: lsError,
+  } = useQuery({
+    queryKey: ["stats-lowstock"],
+    queryFn: statsService.getLowStock,
+  });
 
-  // Enrich transactions with user/item data
+  const {
+    data: itemUsage,
+    isLoading: iuLoading,
+    error: iuError,
+  } = useQuery({
+    queryKey: ["stats-itemusage"],
+    queryFn: () => statsService.getItemUsage(10),
+  });
+
+  const {
+    data: stockMovement,
+    isLoading: smLoading,
+    error: smError,
+  } = useQuery({
+    queryKey: ["stats-stockmovement"],
+    queryFn: () => statsService.getStockMovement(365),
+  });
+
+  const isLoading =
+    summaryLoading || txnsLoading || lsLoading || iuLoading || smLoading;
+  const hasError = summaryError || txnsError || lsError || iuError || smError;
+
+  // --- Derived data ---
   const enrichedTransactions = useMemo(
     () =>
-      transactions.slice(0, 10).map((txn) => ({
-        ...txn,
-        user: userMap[txn.userId] || null,
-        item: itemMap[txn.itemId] || null,
+      (recentTxns || []).map((t) => ({
+        ...t,
+        user: null,
+        item: null,
+        itemId: t.item_id,
+        borrowDate: t.borrowed_at,
+        type: t.status === "borrowed" ? "borrow" : "return",
+        purpose: t.note,
       })),
-    [userMap, itemMap],
+    [recentTxns],
   );
 
-  // Enrich upcoming returns
   const enrichedReturns = useMemo(
     () =>
-      upcomingReturns.map((txn) => ({
-        ...txn,
-        user: userMap[txn.userId] || null,
-        item: itemMap[txn.itemId] || null,
-      })),
-    [upcomingReturns, userMap, itemMap],
+      (recentTxns || [])
+        .filter((t) => t.status === "borrowed")
+        .map((t) => ({
+          ...t,
+          user: null,
+          item: null,
+          expectedReturn: null,
+        })),
+    [recentTxns],
   );
 
-  // Enrich maintenance with item data
-  const enrichedMaintenance = useMemo(
+  const lowStockItems = useMemo(
     () =>
-      maintenanceRecords.slice(0, 5).map((m) => ({
-        ...m,
-        item: itemMap[m.itemId] || null,
+      (lowStock || []).map((l) => ({
+        id: l.item_id,
+        name: l.name,
+        quantity: l.available_quantity,
       })),
-    [itemMap],
+    [lowStock],
   );
 
-  // Current user
-  const currentUser = users[0];
+  const popularEquipment = useMemo(
+    () =>
+      (itemUsage || []).map((u) => ({
+        id: u.item_id,
+        name: u.name,
+        borrowCount: u.borrow_count,
+        image: null,
+        status: "available",
+      })),
+    [itemUsage],
+  );
 
-  if (loading) {
+  const monthlyBorrowStats = useMemo(
+    () =>
+      (stockMovement || []).map((s) => ({
+        month: s.date,
+        borrows: s.borrowed,
+        returns: s.returned,
+      })),
+    [stockMovement],
+  );
+
+  const categoryDistribution = [];
+
+  const enrichedMaintenance = [];
+
+  // --- Loading state ---
+  if (isLoading) {
     return (
       <PageTransition>
         <div className="space-y-6">
@@ -231,6 +284,32 @@ export default function Dashboard() {
     );
   }
 
+  // --- Error state ---
+  if (hasError) {
+    return (
+      <PageTransition>
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 mb-4">
+            <ShieldAlert className="h-8 w-8 text-red-400" />
+          </div>
+          <h3 className="text-base font-semibold text-gray-700">
+            Failed to load dashboard
+          </h3>
+          <p className="mt-1 text-sm text-gray-400">
+            Please check your connection and try again
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="btn btn-outline mt-4 min-h-[44px]"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Reload
+          </button>
+        </div>
+      </PageTransition>
+    );
+  }
+
   return (
     <PageTransition>
       <div className="space-y-6">
@@ -242,15 +321,23 @@ export default function Dashboard() {
         >
           <div className="relative">
             <img
-              src={currentUser.avatar}
-              alt={currentUser.name}
+              src={
+                currentUser?.avatar ||
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser?.full_name || currentUser?.name || "User")}&size=40&background=7C8D7D&color=fff`
+              }
+              alt={currentUser?.full_name || currentUser?.name || "User"}
               className="h-10 w-10 rounded-full object-cover ring-2 ring-white shadow-sm"
             />
             <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900">
-              Welcome back, {currentUser.name.split(" ")[0]}
+              Welcome back,{" "}
+              {
+                (currentUser?.full_name || currentUser?.name || "User").split(
+                  " ",
+                )[0]
+              }
             </h1>
             <p className="text-sm text-gray-500">
               Here&apos;s what&apos;s happening in your lab today.
@@ -263,7 +350,7 @@ export default function Dashboard() {
           <StatCard
             icon={Package}
             label="Total Items"
-            value={stats.totalItems}
+            value={summary?.total_items || 0}
             trend={8}
             trendUp
             colorClass="bg-primary-50 text-primary-600"
@@ -271,7 +358,7 @@ export default function Dashboard() {
           <StatCard
             icon={CheckCircle}
             label="Available"
-            value={stats.available}
+            value={(summary?.total_items || 0) - (summary?.active_borrows || 0)}
             trend={5}
             trendUp
             colorClass="bg-green-50 text-green-600"
@@ -279,7 +366,7 @@ export default function Dashboard() {
           <StatCard
             icon={ArrowLeftRight}
             label="Borrowed"
-            value={stats.borrowed}
+            value={summary?.active_borrows || 0}
             trend={-3}
             trendUp={false}
             colorClass="bg-blue-50 text-blue-600"
@@ -287,7 +374,7 @@ export default function Dashboard() {
           <StatCard
             icon={Wrench}
             label="Maintenance"
-            value={stats.maintenance}
+            value={0}
             trend={2}
             trendUp={false}
             colorClass="bg-amber-50 text-amber-600"
@@ -542,7 +629,12 @@ export default function Dashboard() {
                               : txn.item.name}
                           </Link>
                         ) : (
-                          <span className="text-gray-400">an item</span>
+                          <Link
+                            to={`/inventory/${txn.itemId}`}
+                            className="font-medium text-primary-600 hover:text-primary-700"
+                          >
+                            Item #{txn.itemId}
+                          </Link>
                         )}
                       </p>
                       {txn.purpose && (
@@ -744,7 +836,10 @@ export default function Dashboard() {
                 >
                   <div className="aspect-[4/3] rounded-lg overflow-hidden bg-gray-100 mb-2">
                     <img
-                      src={item.image}
+                      src={
+                        item.image ||
+                        `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&size=176&background=f1f5f9&color=7C8D7D`
+                      }
                       alt={item.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       loading="lazy"

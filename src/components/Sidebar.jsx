@@ -211,13 +211,13 @@ export default function Sidebar({
               {currentUser.avatar ? (
                 <img
                   src={currentUser.avatar}
-                  alt={currentUser.name}
+                  alt={currentUser.full_name || currentUser.name}
                   className="h-8 w-8 flex-shrink-0 rounded-full object-cover"
                 />
               ) : (
                 <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-700">
                   <span className="text-xs font-semibold">
-                    {getInitials(currentUser.name)}
+                    {getInitials(currentUser.full_name || currentUser.name)}
                   </span>
                 </div>
               )}
@@ -231,7 +231,7 @@ export default function Sidebar({
                     className="overflow-hidden whitespace-nowrap min-w-0 flex-1"
                   >
                     <p className="text-sm font-medium text-gray-900 truncate">
-                      {currentUser.name}
+                      {currentUser.full_name || currentUser.name}
                     </p>
                     <p className="text-xs text-gray-500 truncate capitalize">
                       {currentUser.role.replace("-", " ")}

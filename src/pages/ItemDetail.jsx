@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -26,6 +26,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import PageTransition from "../components/PageTransition";
 import {
   cn,
@@ -36,16 +37,9 @@ import {
   getConditionColor,
   truncate,
 } from "../lib/utils";
-import {
-  items,
-  transactions,
-  users,
-  locations,
-  getMaintenanceHistory,
-  getBorrowHistory,
-  getRelatedItems,
-  getRecommendations,
-} from "../data/mockData";
+import { itemService } from "../services/itemService";
+import { locationService } from "../services/locationService";
+import { borrowService } from "../services/borrowService";
 
 function Skeleton({ className }) {
   return <div className={cn("skeleton", className)} />;
@@ -74,22 +68,81 @@ const maintTypeIcons = {
   inspection: Shield,
 };
 
+function enrichItem(apiItem) {
+  if (!apiItem) return null;
+  return {
+    ...apiItem,
+    quantity: apiItem.total_quantity,
+    availableQuantity: apiItem.available_quantity,
+    image: `https://picsum.photos/seed/${apiItem.id}/400/300`,
+    images: null,
+    qrCode: `QR-${apiItem.id}`,
+    value: 0,
+    borrowCount: 0,
+    brand: "",
+    model: "",
+    subcategory: apiItem.category,
+    serialNumber: "",
+    favorite: false,
+    tags: apiItem.category ? [apiItem.category] : [],
+    status: !apiItem.is_active
+      ? "retired"
+      : apiItem.available_quantity > 0
+        ? "available"
+        : "borrowed",
+    condition: "good",
+    specs: {},
+    purchaseDate: apiItem.created_at,
+    createdAt: apiItem.created_at,
+    lastCalibrated: null,
+    lastMaintenance: null,
+    nextMaintenance: null,
+    description: apiItem.description || "",
+    locationId: apiItem.location_id,
+  };
+}
+
 export default function ItemDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState(0);
   const [isFav, setIsFav] = useState(false);
   const [relatedScroll, setRelatedScroll] = useState(0);
 
-  const item = items.find((i) => i.id === id);
+  const {
+    data: apiItem,
+    isLoading: itemLoading,
+    isError: itemError,
+  } = useQuery({
+    queryKey: ["item", id],
+    queryFn: () => itemService.getItem(id),
+    enabled: !!id,
+  });
 
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 700);
-    return () => clearTimeout(timer);
-  }, [id]);
+  const enrichedItem = useMemo(() => enrichItem(apiItem), [apiItem]);
 
-  if (loading) {
+  const { data: locationList = [] } = useQuery({
+    queryKey: ["locations"],
+    queryFn: locationService.listLocations,
+  });
+
+  const { data: apiTransactions = [] } = useQuery({
+    queryKey: ["transactions", id],
+    queryFn: () => borrowService.listTransactions({ item_id: id }),
+    enabled: !!id,
+  });
+
+  const { data: relatedApiItems = [] } = useQuery({
+    queryKey: ["items", "category", enrichedItem?.category],
+    queryFn: () =>
+      itemService.listItems({
+        category: enrichedItem.category,
+        limit: 200,
+      }),
+    enabled: !!enrichedItem?.category,
+  });
+
+  if (itemLoading) {
     return (
       <PageTransition>
         <div className="space-y-6">
@@ -127,7 +180,7 @@ export default function ItemDetail() {
     );
   }
 
-  if (!item) {
+  if (itemError || (!itemLoading && !enrichedItem)) {
     return (
       <PageTransition>
         <div className="card text-center py-20">
@@ -146,23 +199,31 @@ export default function ItemDetail() {
     );
   }
 
-  const userMap = {};
-  users.forEach((u) => {
-    userMap[u.id] = u;
+  const item = enrichedItem;
+
+  const locationMap = {};
+  locationList.forEach((l) => {
+    locationMap[l.id] = l.name;
   });
 
-  const borrowHistory = getBorrowHistory(item.id).map((txn) => ({
+  const borrowHistory = apiTransactions.map((txn) => ({
     ...txn,
-    user: userMap[txn.userId] || null,
+    type: txn.status === "returned" ? "return" : "borrow",
+    user: { name: txn.user_id || "Unknown" },
+    purpose: txn.note || "",
+    borrowDate: txn.borrowed_at,
   }));
-  const maintenanceHistory = getMaintenanceHistory(item.id).map((m) => ({
-    ...m,
-    technician: userMap[m.technicianId]?.name || "Unknown",
-  }));
-  const relatedItems = getRelatedItems(item.id);
-  const recommendedItems = getRecommendations(item.id);
 
-  const locationObj = locations.find((l) => l.id === item.locationId);
+  const maintenanceHistory = [];
+
+  const relatedItems = relatedApiItems
+    .filter((i) => i.id !== id)
+    .slice(0, 6)
+    .map((i) => enrichItem(i));
+
+  const recommendedItems = [];
+
+  const locationObj = locationList.find((l) => l.id === item.locationId);
   const locationName = locationObj ? locationObj.name : "Unknown Location";
   const statusColor = getStatusColor(item.status);
   const conditionColor = getConditionColor(item.condition);

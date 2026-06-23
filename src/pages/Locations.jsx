@@ -1,5 +1,6 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import {
   Search,
   ChevronRight,
@@ -10,23 +11,19 @@ import {
   Package,
   Layers,
   BarChart3,
-  Home,
-  Navigation,
   ShieldAlert,
   Maximize2,
-  Minimize2,
 } from "lucide-react";
 import PageTransition from "../components/PageTransition";
 import {
   cn,
   formatDate,
-  formatRelative,
   formatCurrency,
   getStatusColor,
   getConditionColor,
   truncate,
 } from "../lib/utils";
-import { locations, items as inventoryItems } from "../data/mockData";
+import { locationService } from "../services/locationService";
 
 /* --- CONSTANTS --- */
 const TYPE_ICONS = {
@@ -47,13 +44,16 @@ function Skeleton({ className }) {
   return <div className={cn("skeleton", className)} />;
 }
 
-function TreeSkeleton() {
+function ListSkeleton() {
   return (
     <div className="space-y-2 p-2">
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className="flex items-center gap-3 py-2">
-          <Skeleton className="h-4 w-4" />
-          <Skeleton className="h-4 flex-1" />
+          <Skeleton className="h-8 w-8 rounded-lg" />
+          <div className="flex-1 space-y-1.5">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-3 w-48" />
+          </div>
         </div>
       ))}
     </div>
@@ -93,119 +93,15 @@ function EmptyState({ icon: Icon, title, description }) {
   );
 }
 
-/* --- TREE NODE --- */
-function TreeNode({
-  node,
-  children,
-  selectedId,
-  expandedIds,
-  onToggle,
-  onSelect,
-  depth = 0,
-}) {
-  const hasChildren = children.length > 0;
-  const isExpanded = expandedIds.has(node.id);
-  const isSelected = selectedId === node.id;
-  const TypeIcon = TYPE_ICONS[node.type] || MapPin;
-
-  return (
-    <div>
-      <button
-        onClick={() => {
-          onSelect(node.id);
-          if (hasChildren) onToggle(node.id);
-        }}
-        className={cn(
-          "w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-left transition-all duration-150 min-h-[44px]",
-          isSelected
-            ? "bg-primary-50 text-primary-700 font-medium"
-            : "text-gray-600 hover:bg-gray-50",
-        )}
-        style={{ paddingLeft: `${12 + depth * 20}px` }}
-      >
-        {/* Expand/collapse chevron */}
-        <span
-          className={cn(
-            "h-4 w-4 flex items-center justify-center transition-transform duration-200 flex-shrink-0",
-            isExpanded && "rotate-90",
-            !hasChildren && "invisible",
-          )}
-        >
-          <ChevronRight className="h-3.5 w-3.5" />
-        </span>
-
-        <span
-          className={cn(
-            "flex h-7 w-7 items-center justify-center rounded-lg flex-shrink-0",
-            TYPE_COLORS[node.type] || "text-gray-500 bg-gray-100",
-          )}
-        >
-          <TypeIcon className="h-3.5 w-3.5" />
-        </span>
-
-        <div className="flex-1 min-w-0">
-          <p className="text-sm truncate">{node.name}</p>
-          <p className="text-[11px] text-gray-400 capitalize">{node.type}</p>
-        </div>
-
-        {node.currentItems > 0 && (
-          <span className="text-[11px] text-gray-400 flex-shrink-0">
-            {node.currentItems}
-          </span>
-        )}
-      </button>
-
-      {/* Children */}
-      <AnimatePresence>
-        {hasChildren && isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            {children.map((child) => (
-              <TreeNode
-                key={child.node.id}
-                node={child.node}
-                children={child.children}
-                selectedId={selectedId}
-                expandedIds={expandedIds}
-                onToggle={onToggle}
-                onSelect={onSelect}
-                depth={depth + 1}
-              />
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-/* --- BREADCRUMB --- */
-function Breadcrumb({ path }) {
-  return (
-    <nav className="flex items-center gap-1.5 text-sm flex-wrap">
-      <Home className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
-      {path.map((loc, idx) => (
-        <span key={loc.id} className="flex items-center gap-1.5">
-          <ChevronRight className="h-3 w-3 text-gray-300 flex-shrink-0" />
-          <span
-            className={cn(
-              "transition-colors",
-              idx === path.length - 1
-                ? "text-gray-900 font-medium"
-                : "text-gray-400",
-            )}
-          >
-            {loc.name}
-          </span>
-        </span>
-      ))}
-    </nav>
-  );
+/* --- HELPER: infer location type from name --- */
+function inferLocationType(name) {
+  const n = name.toLowerCase();
+  if (n.includes("building") || n.includes("hall") || n.includes("center"))
+    return "building";
+  if (n.includes("floor") || n.includes("level")) return "floor";
+  if (n.includes("storage") || n.includes("cabinet") || n.includes("closet"))
+    return "storage";
+  return "room";
 }
 
 /* --- LOCATION DETAIL --- */
@@ -215,16 +111,30 @@ function LocationDetail({ location, items }) {
       <EmptyState
         icon={MapPin}
         title="Select a Location"
-        description="Choose a location from the tree to view its details and items."
+        description="Choose a location from the list to view its details and items."
       />
     );
   }
 
-  const TypeIcon = TYPE_ICONS[location.type] || MapPin;
+  const type = location.type || inferLocationType(location.name);
+  const TypeIcon = TYPE_ICONS[type] || MapPin;
+  const capacity = 50;
   const utilization =
-    location.capacity > 0
-      ? Math.round((location.currentItems / location.capacity) * 100)
-      : 0;
+    capacity > 0 ? Math.round((items.length / capacity) * 100) : 0;
+
+  const enrichedItems = useMemo(() => {
+    return items.map((item) => ({
+      ...item,
+      image: `https://picsum.photos/seed/${item.id}/400/300`,
+      status: item.is_active
+        ? item.available_quantity > 0
+          ? "available"
+          : "unavailable"
+        : "retired",
+      condition: "good",
+      value: 0,
+    }));
+  }, [items]);
 
   return (
     <motion.div
@@ -240,7 +150,7 @@ function LocationDetail({ location, items }) {
           <div
             className={cn(
               "flex h-14 w-14 items-center justify-center rounded-2xl flex-shrink-0",
-              TYPE_COLORS[location.type] || "text-gray-500 bg-gray-100",
+              TYPE_COLORS[type] || "text-gray-500 bg-gray-100",
             )}
           >
             <TypeIcon className="h-6 w-6" />
@@ -251,17 +161,17 @@ function LocationDetail({ location, items }) {
               <span
                 className={cn(
                   "badge capitalize",
-                  location.type === "building" && "badge-primary",
-                  location.type === "floor" && "badge-info",
-                  location.type === "room" && "badge-warning",
-                  location.type === "storage" && "badge-neutral",
+                  type === "building" && "badge-primary",
+                  type === "floor" && "badge-info",
+                  type === "room" && "badge-warning",
+                  type === "storage" && "badge-neutral",
                 )}
               >
-                {location.type}
+                {type}
               </span>
             </div>
             <p className="mt-3 text-sm text-gray-500 leading-relaxed">
-              {location.description}
+              {location.description || "No description available."}
             </p>
           </div>
 
@@ -269,7 +179,7 @@ function LocationDetail({ location, items }) {
           <div className="hidden sm:flex flex-col items-center gap-2 p-3 bg-gray-50 rounded-xl border border-gray-100 flex-shrink-0">
             <QrCode className="h-10 w-10 text-gray-300" />
             <span className="text-[10px] text-gray-400 font-mono">
-              {location.qrCode}
+              QR-LOC-{location.id}
             </span>
           </div>
         </div>
@@ -284,9 +194,7 @@ function LocationDetail({ location, items }) {
             </div>
             <div>
               <p className="text-xs text-gray-400">Capacity</p>
-              <p className="text-lg font-bold text-gray-900">
-                {location.capacity}
-              </p>
+              <p className="text-lg font-bold text-gray-900">{capacity}</p>
             </div>
           </div>
         </div>
@@ -345,7 +253,7 @@ function LocationDetail({ location, items }) {
           />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {items.map((item, idx) => (
+            {enrichedItems.map((item, idx) => (
               <motion.div
                 key={item.id}
                 initial={{ opacity: 0, y: 8 }}
@@ -378,7 +286,7 @@ function LocationDetail({ location, items }) {
                     </div>
                     <div className="flex items-center gap-3 mt-2 text-[11px] text-gray-400">
                       <span>
-                        {item.availableQuantity}/{item.quantity} avail.
+                        {item.available_quantity}/{item.total_quantity} avail.
                       </span>
                       <span>{formatCurrency(item.value)}</span>
                     </div>
@@ -395,140 +303,48 @@ function LocationDetail({ location, items }) {
 
 /* --- MAIN PAGE --- */
 export default function Locations() {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedId, setSelectedId] = useState(null);
-  const [expandedIds, setExpandedIds] = useState(new Set());
 
-  // Simulate initial loading
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(timer);
-  }, []);
+  const {
+    data: locationList = [],
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["locations"],
+    queryFn: locationService.listLocations,
+  });
 
-  // Auto-expand first building and select first location on load
-  useEffect(() => {
-    const buildings = locations.filter((l) => l.parentId === null);
-    if (buildings.length > 0) {
-      setExpandedIds(new Set([buildings[0].id]));
-      setSelectedId(buildings[0].id);
-    }
-  }, []);
+  const { data: locationItems = [] } = useQuery({
+    queryKey: ["location-items", selectedId],
+    queryFn: () => locationService.getLocationItems(selectedId),
+    enabled: !!selectedId,
+  });
 
-  // Build tree from flat locations
-  const locationTree = useMemo(() => {
-    const map = {};
-    const roots = [];
-
-    locations.forEach((loc) => {
-      map[loc.id] = { node: loc, children: [] };
-    });
-
-    locations.forEach((loc) => {
-      if (loc.parentId && map[loc.parentId]) {
-        map[loc.parentId].children.push(map[loc.id]);
-      } else if (!loc.parentId) {
-        roots.push(map[loc.id]);
-      }
-    });
-
-    return roots;
-  }, []);
-
-  // Filter tree by search
-  const filteredTree = useMemo(() => {
-    if (!searchQuery.trim()) return locationTree;
-
+  const filteredLocations = useMemo(() => {
+    if (!searchQuery.trim()) return locationList;
     const q = searchQuery.toLowerCase();
-    const matchingIds = new Set(
-      locations
-        .filter(
-          (l) =>
-            l.name.toLowerCase().includes(q) ||
-            l.type.toLowerCase().includes(q) ||
-            l.id.toLowerCase().includes(q) ||
-            (l.description && l.description.toLowerCase().includes(q)),
-        )
-        .map((l) => l.id),
+    return locationList.filter(
+      (l) =>
+        l.name.toLowerCase().includes(q) ||
+        (l.description && l.description.toLowerCase().includes(q)),
     );
-
-    // Expand all ancestors of matching nodes
-    const newExpanded = new Set(expandedIds);
-    locations.forEach((loc) => {
-      if (matchingIds.has(loc.id)) {
-        let parent = loc.parentId;
-        while (parent) {
-          newExpanded.add(parent);
-          const p = locations.find((l) => l.id === parent);
-          parent = p ? p.parentId : null;
-        }
-      }
-    });
-
-    // We'll auto-expand matches in a moment
-    setTimeout(() => setExpandedIds(newExpanded), 0);
-    return locationTree;
-  }, [searchQuery, locationTree]);
-
-  // Flatten tree for rendering with filtering
-  const flattenTree = useCallback(
-    (nodes, depth = 0) => {
-      return nodes.flatMap(({ node, children }) => {
-        const matches = !searchQuery.trim() || true; // always render, highlight instead
-        if (!matches) return [];
-        return [{ node, children, depth }, ...flattenTree(children, depth + 1)];
-      });
-    },
-    [searchQuery],
-  );
-
-  const flatNodes = useMemo(
-    () => flattenTree(filteredTree),
-    [filteredTree, flattenTree],
-  );
+  }, [locationList, searchQuery]);
 
   const selectedLocation = useMemo(
-    () => locations.find((l) => l.id === selectedId),
-    [selectedId],
+    () => locationList.find((l) => l.id === selectedId),
+    [locationList, selectedId],
   );
 
-  const selectedItems = useMemo(
-    () => inventoryItems.filter((item) => item.locationId === selectedId),
-    [selectedId],
-  );
-
-  const path = useMemo(() => {
-    if (!selectedLocation) return [];
-    const result = [selectedLocation];
-    let parentId = selectedLocation.parentId;
-    while (parentId) {
-      const parent = locations.find((l) => l.id === parentId);
-      if (parent) {
-        result.unshift(parent);
-        parentId = parent.parentId;
-      } else {
-        break;
-      }
-    }
-    return result;
-  }, [selectedLocation]);
-
-  const handleToggle = useCallback((id) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
-
-  const handleSelect = useCallback((id) => {
+  const handleSelect = (id) => {
     setSelectedId(id);
-  }, []);
+  };
+
+  const handleRetry = () => {
+    // React Query will automatically retry on refetch
+    window.location.reload();
+  };
 
   return (
     <PageTransition>
@@ -545,16 +361,9 @@ export default function Locations() {
           </div>
         </div>
 
-        {/* Breadcrumb */}
-        {!loading && selectedLocation && (
-          <div className="mb-6">
-            <Breadcrumb path={path} />
-          </div>
-        )}
-
         {/* Split layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left: Location tree */}
+          {/* Left: Location list */}
           <div className="lg:col-span-4 xl:col-span-3">
             <div className="card p-3 lg:sticky lg:top-6">
               {/* Search */}
@@ -569,14 +378,14 @@ export default function Locations() {
                 />
               </div>
 
-              {/* Tree */}
-              {loading ? (
-                <TreeSkeleton />
-              ) : error ? (
+              {/* Location list */}
+              {isLoading ? (
+                <ListSkeleton />
+              ) : isError ? (
                 <div className="p-4 text-sm text-red-500 text-center">
-                  {error}
+                  {error?.message || "Failed to load locations"}
                 </div>
-              ) : flatNodes.length === 0 ? (
+              ) : filteredLocations.length === 0 ? (
                 <EmptyState
                   icon={Search}
                   title="No Locations Found"
@@ -584,18 +393,46 @@ export default function Locations() {
                 />
               ) : (
                 <div className="max-h-[60vh] overflow-y-auto scrollbar-thin -mx-1">
-                  {filteredTree.map(({ node, children }) => (
-                    <TreeNode
-                      key={node.id}
-                      node={node}
-                      children={children}
-                      selectedId={selectedId}
-                      expandedIds={expandedIds}
-                      onToggle={handleToggle}
-                      onSelect={handleSelect}
-                      depth={0}
-                    />
-                  ))}
+                  {filteredLocations.map((loc) => {
+                    const type = inferLocationType(loc.name);
+                    const TypeIcon = TYPE_ICONS[type] || MapPin;
+                    const isSelected = selectedId === loc.id;
+                    return (
+                      <button
+                        key={loc.id}
+                        onClick={() => handleSelect(loc.id)}
+                        className={cn(
+                          "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all duration-150 min-h-[44px]",
+                          isSelected
+                            ? "bg-primary-50 text-primary-700 font-medium"
+                            : "text-gray-600 hover:bg-gray-50",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "flex h-7 w-7 items-center justify-center rounded-lg flex-shrink-0",
+                            TYPE_COLORS[type] || "text-gray-500 bg-gray-100",
+                          )}
+                        >
+                          <TypeIcon className="h-3.5 w-3.5" />
+                        </span>
+
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm truncate">{loc.name}</p>
+                          <p className="text-[11px] text-gray-400 capitalize">
+                            {type}
+                          </p>
+                        </div>
+
+                        <ChevronRight
+                          className={cn(
+                            "h-4 w-4 flex-shrink-0 transition-colors",
+                            isSelected ? "text-primary-500" : "text-gray-300",
+                          )}
+                        />
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -603,9 +440,9 @@ export default function Locations() {
 
           {/* Right: Location detail */}
           <div className="lg:col-span-8 xl:col-span-9">
-            {loading ? (
+            {isLoading ? (
               <DetailSkeleton />
-            ) : error ? (
+            ) : isError ? (
               <div className="card flex flex-col items-center justify-center py-16">
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 mb-4">
                   <ShieldAlert className="h-8 w-8 text-red-400" />
@@ -613,13 +450,11 @@ export default function Locations() {
                 <h3 className="text-base font-semibold text-gray-700">
                   Something went wrong
                 </h3>
-                <p className="mt-1 text-sm text-gray-400">{error}</p>
+                <p className="mt-1 text-sm text-gray-400">
+                  {error?.message || "Failed to load locations"}
+                </p>
                 <button
-                  onClick={() => {
-                    setError(null);
-                    setLoading(true);
-                    setTimeout(() => setLoading(false), 500);
-                  }}
+                  onClick={handleRetry}
                   className="btn btn-outline mt-4 min-h-[44px]"
                 >
                   Try Again
@@ -628,7 +463,7 @@ export default function Locations() {
             ) : (
               <LocationDetail
                 location={selectedLocation}
-                items={selectedItems}
+                items={locationItems}
               />
             )}
           </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
@@ -37,6 +37,7 @@ import {
   MoreHorizontal,
   LucideQrCode,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import PageTransition from "../components/PageTransition";
 import {
   cn,
@@ -47,7 +48,9 @@ import {
   getConditionColor,
   truncate,
 } from "../lib/utils";
-import { users, items, stats } from "../data/mockData";
+import { users } from "../data/mockData";
+import { statsService } from "../services/statsService";
+import { itemService } from "../services/itemService";
 
 // ---- Constants ----
 const ADMIN_TABS = [
@@ -333,7 +336,6 @@ function QRPattern({ code }) {
 
 // ---- Main Component ----
 export default function Admin() {
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
   const [auditCategory, setAuditCategory] = useState("all");
   const [auditSearch, setAuditSearch] = useState("");
@@ -344,10 +346,27 @@ export default function Admin() {
   const [userStatusFilter, setUserStatusFilter] = useState("all");
   const [editingUser, setEditingUser] = useState(null);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 600);
-    return () => clearTimeout(timer);
-  }, []);
+  // --- API Queries ---
+  const {
+    data: summary,
+    isLoading: summaryLoading,
+    error: summaryError,
+  } = useQuery({
+    queryKey: ["stats-summary"],
+    queryFn: statsService.getSummary,
+  });
+
+  const {
+    data: itemsList,
+    isLoading: itemsLoading,
+    error: itemsError,
+  } = useQuery({
+    queryKey: ["items-list"],
+    queryFn: () => itemService.listItems({ limit: 200 }),
+  });
+
+  const isLoading = summaryLoading || itemsLoading;
+  const hasError = summaryError || itemsError;
 
   const adminUsers = useMemo(() => users, []);
 
@@ -432,16 +451,16 @@ export default function Admin() {
 
   const computedStats = useMemo(
     () => ({
-      totalItems: stats?.totalItems || 0,
+      totalItems: summary?.total_items || 0,
       totalUsers: users.length,
-      activeBorrows: stats?.borrowedItems || 0,
+      activeBorrows: summary?.active_borrows || 0,
       systemHealth: "98.7%",
     }),
-    [],
+    [summary],
   );
 
   // Loading state
-  if (loading) {
+  if (isLoading) {
     return (
       <PageTransition>
         <div className="flex gap-6 h-full">
@@ -458,6 +477,32 @@ export default function Admin() {
             </div>
             <Skeleton className="h-64 w-full" />
           </div>
+        </div>
+      </PageTransition>
+    );
+  }
+
+  // Error state
+  if (hasError) {
+    return (
+      <PageTransition>
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 mb-4">
+            <ShieldAlert className="h-8 w-8 text-red-400" />
+          </div>
+          <h3 className="text-base font-semibold text-gray-700">
+            Failed to load admin panel
+          </h3>
+          <p className="mt-1 text-sm text-gray-400">
+            Please check your connection and try again
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="btn btn-outline mt-4 min-h-[44px]"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Reload
+          </button>
         </div>
       </PageTransition>
     );
