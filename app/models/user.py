@@ -1,7 +1,9 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SAEnum
-from sqlalchemy.orm import relationship
-from datetime import datetime, timezone
 import enum
+from datetime import datetime, timezone
+
+from sqlalchemy import Boolean, Column, DateTime, Integer, String
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy.orm import relationship
 
 from app.database import Base
 
@@ -20,7 +22,8 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, nullable=False, index=True)
-    password = Column(String(255), nullable=False)
+    password = Column(String(255), nullable=True)
+    auth_provider = Column(String(20), nullable=False, default="email")
     full_name = Column(String(255), nullable=True)
     role = Column(SAEnum(UserRoleEnum), nullable=False, default=UserRoleEnum.user)
     is_active = Column(Boolean, nullable=False, default=True)

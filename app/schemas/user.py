@@ -1,7 +1,8 @@
-from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
 from enum import Enum
 from typing import Optional
+
+from pydantic import BaseModel, EmailStr, Field
 
 
 class UserRole(str, Enum):
@@ -12,6 +13,10 @@ class UserRole(str, Enum):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class GoogleLoginRequest(BaseModel):
+    credential: str
 
 
 class CreateUser(BaseModel):
@@ -40,5 +45,6 @@ class LoginResponse(BaseModel):
 
 class Token(BaseModel):
     """Standard OAuth2 token response (Swagger Authorize button)."""
+
     access_token: str
     token_type: str = "bearer"
