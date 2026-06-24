@@ -1,20 +1,20 @@
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.database import SessionLocal, engine, Base
-
 # Import all models so SQLAlchemy's metadata sees every table before create_all.
 from app import models  # noqa: F401
-
 from app.api.auth import router as auth_router
-from app.api.users import router as users_router
+from app.api.borrow import router as borrow_router
 from app.api.items import router as items_router
 from app.api.locations import router as locations_router
-from app.api.borrow import router as borrow_router
 from app.api.stats import router as stats_router
+from app.api.users import router as users_router
+from app.database import Base, SessionLocal, engine
 
 
 @asynccontextmanager
@@ -36,10 +36,23 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Laboratory Inventory Management API", lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:4173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # Force every validation error into the project-standard {"detail": "..."} shape.
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
     first = exc.errors()[0] if exc.errors() else {"msg": "Validation error"}
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -63,4 +76,5 @@ app.include_router(stats_router, prefix="/api")
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="127.0.0.1", port=8000)
