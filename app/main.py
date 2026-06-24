@@ -39,6 +39,7 @@ app = FastAPI(title="Laboratory Inventory Management API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://inventory-management-sandy-one.vercel.app",
         "http://localhost:5173",
         "http://localhost:4173",
     ],
