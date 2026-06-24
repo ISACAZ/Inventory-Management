@@ -63,6 +63,14 @@ def authenticate_google(db: Session, credential: str) -> LoginResponse:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Account is deactivated"
         )
+
+    # Auto-promote to admin if email is in ADMIN_EMAILS
+    admin_emails = [e.strip() for e in settings.ADMIN_EMAILS.split(",") if e.strip()]
+    if info["email"].lower() in [e.lower() for e in admin_emails]:
+        if user.role != UserRoleEnum.admin:
+            user.role = UserRoleEnum.admin
+            db.commit()
+
     token = create_access_token(data={"sub": str(user.id), "role": user.role.value})
     return LoginResponse(
         access_token=token, token_type="bearer", user=UserOut.model_validate(user)
