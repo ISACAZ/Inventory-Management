@@ -8,7 +8,7 @@ You are setting up a FastAPI backend with SQLite for local development and addin
 - `app/config.py` — `Settings` class with `DATABASE_URL: str`, `SECRET_KEY: str`, reads from `.env`
 - `app/database.py` — `create_engine(settings.DATABASE_URL)` only, no SQLite compat
 - `app/models/user.py` — User model: id, email, password (NOT NULL), full_name, role (admin|user), is_active, created_at, updated_at
-- `app/api/auth.py` — `POST /auth/login` (LoginRequest → LoginResponse), `POST /auth/token` (OAuth2 form for Swagger)
+- `app/api/auth.py` — `เิ้POST /auth/login` (LoginRequest → LoginResponse), `POST /auth/token` (OAuth2 form for Swagger)
 - `app/services/auth_service.py` — authenticate() checks email+password, create_access_token({"sub": str(user.id), "role": user.role.value}); create_user(); list_users(); get_user()
 - `app/core/security.py` — hash_password, verify_password (bcrypt), create_access_token, decode_token (HS256, 24h expiry)
 - `app/api/deps.py` — get_db (SessionLocal), get_current_user (Bearer → decode_token → query User), require_admin
