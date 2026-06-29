@@ -87,7 +87,7 @@ export default function Sidebar({
         >
           <NavLink to="/" className="flex items-center gap-3 flex-shrink-0">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-500 text-white flex-shrink-0">
-              <FlaskConical className="h-5 w-5" />
+              <Wrench className="h-5 w-5" />
             </div>
             <AnimatePresence mode="wait">
               {!collapsed && (
@@ -99,7 +99,7 @@ export default function Sidebar({
                   className="overflow-hidden whitespace-nowrap"
                 >
                   <span className="text-lg font-semibold tracking-tight text-gray-900">
-                    LabFlow
+                    LabInventory
                   </span>
                 </motion.div>
               )}
