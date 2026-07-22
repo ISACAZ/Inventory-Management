@@ -171,7 +171,7 @@ export default function Inventory() {
           cmp = a.name.localeCompare(b.name);
           break;
         case "category":
-          cmp = a.category.localeCompare(b.category);
+          cmp = (a.category || "").localeCompare(b.category || "");
           break;
         case "date":
           cmp = new Date(a.purchaseDate) - new Date(b.purchaseDate);
