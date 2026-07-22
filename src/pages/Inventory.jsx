@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -48,6 +48,7 @@ function Badge({ children, className }) {
 }
 
 export default function Inventory() {
+  const navigate = useNavigate();
   const [viewMode, setViewMode] = useState("grid");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -137,7 +138,7 @@ export default function Inventory() {
       result = result.filter(
         (item) =>
           item.name.toLowerCase().includes(q) ||
-          item.category.toLowerCase().includes(q) ||
+          (item.category || "").toLowerCase().includes(q) ||
           (locationMap[item.locationId] || "").toLowerCase().includes(q) ||
           item.qrCode.toLowerCase().includes(q) ||
           (item.tags || []).some((t) => t.toLowerCase().includes(q)),
@@ -545,11 +546,10 @@ export default function Inventory() {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() =>
-                    toast.success(
-                      `${selectedItems.size} items queued for borrow`,
-                    )
-                  }
+                  onClick={() => {
+                    toast.success(`${selectedItems.size} items queued for borrow`);
+                    navigate('/borrow');
+                  }}
                   className="btn btn-primary text-sm px-3 h-9"
                 >
                   Borrow Selected
@@ -686,7 +686,9 @@ export default function Inventory() {
                         <button
                           onClick={(e) => {
                             e.preventDefault();
+                            e.stopPropagation();
                             toast.success(`${item.name} added to borrow list`);
+                            navigate('/borrow');
                           }}
                           className="btn btn-primary text-xs px-3 py-1.5 h-8"
                         >
@@ -862,11 +864,11 @@ export default function Inventory() {
                               />
                             </button>
                             <button
-                              onClick={() =>
-                                toast.success(
-                                  `${item.name} added to borrow list`,
-                                )
-                              }
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toast.success(`${item.name} added to borrow list`);
+                                navigate('/borrow');
+                              }}
                               className="btn btn-primary text-xs px-3 py-1.5 h-8"
                             >
                               Borrow

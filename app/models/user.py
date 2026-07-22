@@ -17,6 +17,25 @@ class UserRoleEnum(str, enum.Enum):
     user = "user"
 
 
+def detect_department(email: str) -> str | None:
+    """Determine faculty from KMUTL email pattern.
+
+    xx00xx@kmitl.ac.th → Mechatronics Engineering
+    xx10xx@kmitl.ac.th → Computer Engineering
+    xx20xx@kmitl.ac.th → Electronics and Electrical Engineering
+    """
+    prefix = email.split("@")[0]
+    if len(prefix) < 4:
+        return None
+    code = prefix[2:4]
+    mapping = {
+        "00": "Mechatronics Engineering",
+        "10": "Computer Engineering",
+        "20": "Electronics and Electrical Engineering",
+    }
+    return mapping.get(code)
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -25,6 +44,7 @@ class User(Base):
     password = Column(String(255), nullable=True)
     auth_provider = Column(String(20), nullable=False, default="email")
     full_name = Column(String(255), nullable=True)
+    department = Column(String(100), nullable=True)
     role = Column(SAEnum(UserRoleEnum), nullable=False, default=UserRoleEnum.user)
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, nullable=False, default=_utcnow)

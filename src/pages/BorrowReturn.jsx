@@ -175,8 +175,8 @@ function BorrowTab({ currentUser, items, borrowMutation }) {
           i.is_active &&
           i.available_quantity > 0 &&
           (i.name.toLowerCase().includes(q) ||
-            i.category.toLowerCase().includes(q) ||
-            i.id.toLowerCase().includes(q)),
+            (i.category || "").toLowerCase().includes(q) ||
+            String(i.id).toLowerCase().includes(q)),
       )
       .slice(0, 8);
   }, [searchQuery, items]);
@@ -511,8 +511,8 @@ function ReturnTab({ currentUser, items, transactions, returnMutation }) {
       return (
         item &&
         (item.name.toLowerCase().includes(q) ||
-          item.id.toLowerCase().includes(q) ||
-          item.category.toLowerCase().includes(q) ||
+          String(item.id).toLowerCase().includes(q) ||
+          (item.category || "").toLowerCase().includes(q) ||
           (t.note && t.note.toLowerCase().includes(q)))
       );
     });

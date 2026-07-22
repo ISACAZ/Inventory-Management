@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.core.google_auth import verify_google_token
 from app.core.security import create_access_token, hash_password, verify_password
-from app.models.user import User, UserRoleEnum
+from app.models.user import User, UserRoleEnum, detect_department
 from app.schemas.user import CreateUser, LoginRequest, LoginResponse, UserOut
 
 
@@ -55,10 +55,16 @@ def authenticate_google(db: Session, credential: str) -> LoginResponse:
             auth_provider="google",
             role=UserRoleEnum.user,
             is_active=True,
+            department=detect_department(info["email"]),
         )
         db.add(user)
         db.commit()
         db.refresh(user)
+    else:
+        if not user.department:
+            user.department = detect_department(info["email"])
+            db.commit()
+            db.refresh(user)
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Account is deactivated"
@@ -89,6 +95,7 @@ def create_user(db: Session, body: CreateUser) -> User:
         password=hash_password(body.password),
         role=body.role or UserRoleEnum.user,
         is_active=True,
+        department=detect_department(body.email),
     )
     db.add(user)
     db.commit()
