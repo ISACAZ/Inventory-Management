@@ -25,6 +25,8 @@ async def lifespan(app: FastAPI):
         db.execute(text("SELECT 1"))
         print("Database connected successfully")
         Base.metadata.create_all(bind=engine)
+        from app.seed import seed_if_empty
+        seed_if_empty()
     except Exception as e:
         print(f"Database connection failed: {e}")
     finally:
