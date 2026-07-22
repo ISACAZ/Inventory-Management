@@ -21,11 +21,16 @@ def seed_if_empty() -> None:
                 name = row["Name"].strip().replace("\t", " ")
                 if not name:
                     continue
+                def parse_qty(val):
+                    import re
+                    m = re.search(r'\d+', str(val))
+                    return int(m.group(0)) if m else 0
+
                 db.add(Item(
                     name=name,
                     description=row.get("Description", "").strip(),
-                    total_quantity=int(row["Total Quantity"]),
-                    available_quantity=int(row["Quantity Available"]),
+                    total_quantity=parse_qty(row["Total Quantity"]),
+                    available_quantity=parse_qty(row["Quantity Available"]),
                     low_stock_threshold=1,
                     is_active=True,
                 ))
