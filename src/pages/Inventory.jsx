@@ -368,7 +368,7 @@ export default function Inventory() {
               className={cn(
                 "btn btn-outline text-sm px-3 min-h-[44px]",
                 showFilters &&
-                  "bg-primary-50 border-primary-300 text-primary-700",
+                "bg-primary-50 border-primary-300 text-primary-700",
               )}
             >
               <SlidersHorizontal className="h-4 w-4" /> Filters
