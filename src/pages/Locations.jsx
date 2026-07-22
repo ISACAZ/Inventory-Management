@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   Search,
   ChevronRight,
@@ -13,6 +14,10 @@ import {
   BarChart3,
   ShieldAlert,
   Maximize2,
+  Plus,
+  Edit,
+  Trash2,
+  X,
 } from "lucide-react";
 import PageTransition from "../components/PageTransition";
 import {
@@ -24,6 +29,7 @@ import {
   truncate,
 } from "../lib/utils";
 import { locationService } from "../services/locationService";
+import { useAuth } from "../hooks/useAuth";
 
 /* --- CONSTANTS --- */
 const TYPE_ICONS = {
@@ -303,8 +309,13 @@ function LocationDetail({ location, items }) {
 
 /* --- MAIN PAGE --- */
 export default function Locations() {
+  const { currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedId, setSelectedId] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingLocation, setEditingLocation] = useState(null);
 
   const {
     data: locationList = [],
@@ -321,6 +332,105 @@ export default function Locations() {
     queryFn: () => locationService.getLocationItems(selectedId),
     enabled: !!selectedId,
   });
+
+  // ── Mutations for admin ──────────────────────────────────────────────
+
+  const createMutation = useMutation({
+    mutationFn: locationService.createLocation,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["locations"] });
+      toast.success("Location created");
+      setShowForm(false);
+    },
+    onError: (err) => toast.error(err.message || "Failed to create location"),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => locationService.updateLocation(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["locations"] });
+      toast.success("Location updated");
+      setShowForm(false);
+      setEditingLocation(null);
+    },
+    onError: (err) => toast.error(err.message || "Failed to update location"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: locationService.deleteLocation,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["locations"] });
+      if (selectedId === editingLocation?.id) setSelectedId(null);
+      toast.success("Location deleted");
+      setEditingLocation(null);
+    },
+    onError: (err) => toast.error(err.message || "Failed to delete location"),
+  });
+
+  const handleFormSubmit = (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const data = {
+      name: form.name.value.trim(),
+      description: form.description.value.trim() || null,
+    };
+    if (!data.name) return;
+
+    if (editingLocation) {
+      updateMutation.mutate({ id: editingLocation.id, data });
+    } else {
+      createMutation.mutate(data);
+    }
+  };
+
+  const handleEdit = (loc) => {
+    setEditingLocation(loc);
+    setShowForm(true);
+    // Pre-fill form — will be handled via defaultValue on inputs
+  };
+
+  const handleDelete = (loc) => {
+    toast.custom(
+      (t) => (
+        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 max-w-sm">
+          <p className="text-sm font-medium text-gray-900 mb-1">
+            Delete &ldquo;{loc.name}&rdquo;?
+          </p>
+          <p className="text-xs text-gray-500 mb-3">
+            This will deactivate the location. It can be restored later.
+          </p>
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={() => toast.dismiss(t)}
+              className="btn btn-ghost min-h-0 py-1.5 px-3 text-xs"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                toast.dismiss(t);
+                deleteMutation.mutate(loc.id);
+              }}
+              className="btn bg-red-500 text-white min-h-0 py-1.5 px-3 text-xs hover:bg-red-600"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      ),
+      { duration: 10000 },
+    );
+  };
+
+  const openCreateForm = () => {
+    setEditingLocation(null);
+    setShowForm(true);
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingLocation(null);
+  };
 
   const filteredLocations = useMemo(() => {
     if (!searchQuery.trim()) return locationList;
@@ -359,6 +469,15 @@ export default function Locations() {
               Browse and manage lab locations and storage areas
             </p>
           </div>
+          {isAdmin && (
+            <button
+              onClick={openCreateForm}
+              className="btn btn-primary flex items-center gap-2 min-h-[44px]"
+            >
+              <Plus className="h-4 w-4" />
+              Add Location
+            </button>
+          )}
         </div>
 
         {/* Split layout */}
@@ -424,6 +543,31 @@ export default function Locations() {
                           </p>
                         </div>
 
+                        {isAdmin && (
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEdit(loc);
+                              }}
+                              className="p-1 rounded text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
+                              title="Edit location"
+                            >
+                              <Edit className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(loc);
+                              }}
+                              className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                              title="Delete location"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
+
                         <ChevronRight
                           className={cn(
                             "h-4 w-4 flex-shrink-0 transition-colors",
@@ -469,6 +613,90 @@ export default function Locations() {
           </div>
         </div>
       </div>
+
+      {/* ── Create/Edit Modal ───────────────────────────────────────── */}
+      <AnimatePresence>
+        {showForm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+            onClick={closeForm}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 16 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md mx-4 p-6"
+            >
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {editingLocation ? "Edit Location" : "Add Location"}
+                </h3>
+                <button
+                  onClick={closeForm}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleFormSubmit} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label htmlFor="loc-name" className="label">
+                    Name <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    id="loc-name"
+                    name="name"
+                    type="text"
+                    required
+                    className="input"
+                    placeholder="e.g., Cabinet C3"
+                    defaultValue={editingLocation?.name || ""}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="loc-desc" className="label">
+                    Description
+                  </label>
+                  <textarea
+                    id="loc-desc"
+                    name="description"
+                    rows={3}
+                    className="input"
+                    placeholder="Optional description..."
+                    defaultValue={editingLocation?.description || ""}
+                  />
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={closeForm}
+                    className="btn btn-ghost flex-1 min-h-[44px]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={createMutation.isPending || updateMutation.isPending}
+                    className="btn btn-primary flex-1 min-h-[44px] flex items-center justify-center gap-2"
+                  >
+                    {createMutation.isPending || updateMutation.isPending ? (
+                      <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : null}
+                    {editingLocation ? "Save Changes" : "Create"}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </PageTransition>
   );
 }

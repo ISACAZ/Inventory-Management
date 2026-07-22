@@ -31,14 +31,23 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const login = useCallback(async (credential) => {
-    const data = await authService.googleLogin(credential);
+  const _storeAuth = useCallback((data) => {
     const { access_token, user } = data;
     localStorage.setItem("lab_token", access_token);
     localStorage.setItem("lab_currentUser", JSON.stringify(user));
     setToken(access_token);
     setCurrentUser(user);
   }, []);
+
+  const login = useCallback(async (credential) => {
+    const data = await authService.googleLogin(credential);
+    _storeAuth(data);
+  }, [_storeAuth]);
+
+  const emailLogin = useCallback(async (email, password) => {
+    const data = await authService.emailLogin(email, password);
+    _storeAuth(data);
+  }, [_storeAuth]);
 
   const logout = useCallback(() => {
     localStorage.removeItem("lab_token");
@@ -53,6 +62,7 @@ export function AuthProvider({ children }) {
         currentUser,
         token,
         login,
+        emailLogin,
         logout,
         isAuthenticated: !!currentUser,
         isLoading,

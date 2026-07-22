@@ -37,7 +37,7 @@ import {
   MoreHorizontal,
   LucideQrCode,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageTransition from "../components/PageTransition";
 import {
   cn,
@@ -48,9 +48,9 @@ import {
   getConditionColor,
   truncate,
 } from "../lib/utils";
-import { users } from "../data/mockData";
 import { statsService } from "../services/statsService";
 import { itemService } from "../services/itemService";
+import { userService } from "../services/userService";
 
 // ---- Constants ----
 const ADMIN_TABS = [
@@ -336,6 +336,7 @@ function QRPattern({ code }) {
 
 // ---- Main Component ----
 export default function Admin() {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("overview");
   const [auditCategory, setAuditCategory] = useState("all");
   const [auditSearch, setAuditSearch] = useState("");
@@ -345,8 +346,7 @@ export default function Admin() {
   const [userSearch, setUserSearch] = useState("");
   const [userStatusFilter, setUserStatusFilter] = useState("all");
   const [editingUser, setEditingUser] = useState(null);
-
-  // --- API Queries ---
+  const [showAddUser, setShowAddUser] = useState(false);
   const {
     data: summary,
     isLoading: summaryLoading,
@@ -368,29 +368,69 @@ export default function Admin() {
   const isLoading = summaryLoading || itemsLoading;
   const hasError = summaryError || itemsError;
 
-  const adminUsers = useMemo(() => users, []);
+  // Fetch real users from API
+  const {
+    data: apiUsers = [],
+    isLoading: usersLoading,
+    isError: usersError,
+    error: usersApiError,
+  } = useQuery({
+    queryKey: ["admin-users"],
+    queryFn: () => userService.listUsers({ limit: 200 }),
+  });
+
+  // Mutations for user management
+  const updateUserMutation = useMutation({
+    mutationFn: ({ id, data }) => userService.updateUser(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      toast.success("User updated");
+      setEditingUser(null);
+    },
+    onError: (err) => toast.error(err.message || "Failed to update user"),
+  });
+
+  const toggleUserMutation = useMutation({
+    mutationFn: ({ id, isActive }) =>
+      userService.updateUser(id, { is_active: isActive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      toast.success("User status updated");
+    },
+    onError: (err) => toast.error(err.message || "Failed to update user"),
+  });
+
+  const createUserMutation = useMutation({
+    mutationFn: userService.createUser,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      toast.success("User created");
+      setShowAddUser(false);
+    },
+    onError: (err) => toast.error(err.message || "Failed to create user"),
+  });
 
   const filteredUsers = useMemo(() => {
-    let result = [...adminUsers];
+    let result = [...apiUsers];
     if (userStatusFilter !== "all") {
-      result = result.filter(
-        (u) =>
-          u.status === userStatusFilter ||
-          (!u.status && userStatusFilter === "active"),
-      );
+      result = result.filter((u) => {
+        if (userStatusFilter === "active") return u.is_active;
+        if (userStatusFilter === "disabled") return !u.is_active;
+        return true;
+      });
     }
     if (userSearch) {
       const q = userSearch.toLowerCase();
       result = result.filter(
         (u) =>
-          u.name.toLowerCase().includes(q) ||
+          (u.full_name && u.full_name.toLowerCase().includes(q)) ||
           u.email.toLowerCase().includes(q) ||
-          u.department.toLowerCase().includes(q) ||
+          (u.department && u.department.toLowerCase().includes(q)) ||
           u.role.toLowerCase().includes(q),
       );
     }
     return result;
-  }, [adminUsers, userStatusFilter, userSearch]);
+  }, [apiUsers, userStatusFilter, userSearch]);
 
   const filteredAuditLogs = useMemo(() => {
     let result = [...MOCK_AUDIT_LOGS];
@@ -410,17 +450,39 @@ export default function Admin() {
   }, [auditCategory, auditSearch]);
 
   const handleDisableUser = (user) => {
-    toast.success(`${user.name} has been disabled`, {
-      description: "The user will no longer have access to the system",
-    });
+    const makeActive = !user.is_active;
+    toggleUserMutation.mutate({ id: user.id, isActive: makeActive });
   };
 
   const handleEditUser = (user) => {
     setEditingUser(user);
     if (activeTab !== "users") setActiveTab("users");
-    toast.info(`Editing ${user.name}`, {
-      description: "User edit form opened",
-    });
+  };
+
+  const handleEditSubmit = (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const data = {};
+    const fullName = form.full_name.value.trim();
+    if (fullName) data.full_name = fullName;
+    const emailVal = form.email.value.trim();
+    if (emailVal && emailVal !== editingUser.email) data.email = emailVal;
+    const pwd = form.password.value;
+    if (pwd) data.password = pwd;
+    if (form.role.value) data.role = form.role.value;
+    updateUserMutation.mutate({ id: editingUser.id, data });
+  };
+
+  const handleAddUserSubmit = (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const data = {
+      email: form.email.value.trim(),
+      password: form.password.value,
+      full_name: form.full_name.value.trim() || null,
+      role: form.role.value || "user",
+    };
+    createUserMutation.mutate(data);
   };
 
   const handleGenerateQR = async () => {
@@ -452,7 +514,7 @@ export default function Admin() {
   const computedStats = useMemo(
     () => ({
       totalItems: summary?.total_items || 0,
-      totalUsers: users.length,
+      totalUsers: apiUsers.length,
       activeBorrows: summary?.active_borrows || 0,
       systemHealth: "98.7%",
     }),
@@ -592,7 +654,7 @@ export default function Admin() {
                           if (action.id === "add-item")
                             toast.info("Add Item dialog opened");
                           else if (action.id === "add-user")
-                            toast.info("Add User dialog opened");
+                            setShowAddUser(true);
                           else if (action.id === "scan-qr")
                             toast.info("QR Scanner opened");
                           else if (action.id === "backup")
@@ -682,6 +744,14 @@ export default function Admin() {
                     <option value="active">Active</option>
                     <option value="disabled">Disabled</option>
                   </select>
+                  {/* Add User button */}
+                  <button
+                    onClick={() => setShowAddUser(true)}
+                    className="btn btn-primary flex items-center gap-2 min-h-[44px]"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add User
+                  </button>
                 </div>
 
                 {/* Users Table */}
@@ -723,9 +793,10 @@ export default function Admin() {
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                           {filteredUsers.map((user, idx) => {
+                            const displayName = user.full_name || user.email.split("@")[0];
+                            const userStatus = user.is_active ? "active" : "disabled";
                             const statusInfo =
-                              STATUS_CONFIG[user.status] ||
-                              STATUS_CONFIG.active;
+                              STATUS_CONFIG[userStatus] || STATUS_CONFIG.active;
                             return (
                               <motion.tr
                                 key={user.id}
@@ -737,16 +808,13 @@ export default function Admin() {
                                 <td className="px-5 py-3.5">
                                   <div className="flex items-center gap-3">
                                     <img
-                                      src={
-                                        user.avatar ||
-                                        `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=7C8D7D&color=fff&size=64`
-                                      }
-                                      alt={user.name}
+                                      src={`https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=7C8D7D&color=fff&size=64`}
+                                      alt={displayName}
                                       className="h-9 w-9 rounded-full object-cover flex-shrink-0"
                                       loading="lazy"
                                     />
                                     <span className="text-sm font-medium text-gray-900">
-                                      {user.name}
+                                      {displayName}
                                     </span>
                                   </div>
                                 </td>
@@ -759,7 +827,7 @@ export default function Admin() {
                                   </span>
                                 </td>
                                 <td className="px-5 py-3.5 text-sm text-gray-600">
-                                  {truncate(user.department, 25)}
+                                  {truncate(user.department || "—", 25)}
                                 </td>
                                 <td className="px-5 py-3.5">
                                   <span
@@ -785,15 +853,15 @@ export default function Admin() {
                                       onClick={() => handleDisableUser(user)}
                                       className="btn btn-ghost p-2 min-h-0 rounded-lg text-red-500 hover:bg-red-50"
                                       title={
-                                        user.status === "disabled"
-                                          ? "Enable user"
-                                          : "Disable user"
+                                        user.is_active
+                                          ? "Disable user"
+                                          : "Enable user"
                                       }
                                     >
-                                      {user.status === "disabled" ? (
-                                        <UserCheck className="h-4 w-4" />
-                                      ) : (
+                                      {user.is_active ? (
                                         <UserX className="h-4 w-4" />
+                                      ) : (
+                                        <UserCheck className="h-4 w-4" />
                                       )}
                                     </button>
                                   </div>
@@ -1042,6 +1110,205 @@ export default function Admin() {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* ── Edit User Modal ──────────────────────────────────────────── */}
+      <AnimatePresence>
+        {editingUser && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+            onClick={() => setEditingUser(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 16 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md mx-4 p-6"
+            >
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Edit User
+                </h3>
+                <button
+                  onClick={() => setEditingUser(null)}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                >
+                  <XCircle className="h-4 w-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleEditSubmit} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="label">Full Name</label>
+                  <input
+                    name="full_name"
+                    type="text"
+                    className="input"
+                    defaultValue={editingUser.full_name || ""}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="label">Email</label>
+                  <input
+                    name="email"
+                    type="email"
+                    className="input"
+                    defaultValue={editingUser.email}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="label">New Password (leave blank to keep)</label>
+                  <input
+                    name="password"
+                    type="password"
+                    className="input"
+                    placeholder="••••••••"
+                    autoComplete="new-password"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="label">Role</label>
+                  <select
+                    name="role"
+                    className="input"
+                    defaultValue={editingUser.role}
+                  >
+                    <option value="user">User</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingUser(null)}
+                    className="btn btn-ghost flex-1 min-h-[44px]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={updateUserMutation.isPending}
+                    className="btn btn-primary flex-1 min-h-[44px] flex items-center justify-center gap-2"
+                  >
+                    {updateUserMutation.isPending && (
+                      <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    )}
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Add User Modal ───────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showAddUser && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+            onClick={() => setShowAddUser(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 16 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md mx-4 p-6"
+            >
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Add User
+                </h3>
+                <button
+                  onClick={() => setShowAddUser(false)}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                >
+                  <XCircle className="h-4 w-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleAddUserSubmit} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="label">
+                    Email <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    name="email"
+                    type="email"
+                    required
+                    className="input"
+                    placeholder="user@kmitl.ac.th"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="label">
+                    Password <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    name="password"
+                    type="password"
+                    required
+                    minLength={6}
+                    className="input"
+                    placeholder="Min 6 characters"
+                    autoComplete="new-password"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="label">Full Name</label>
+                  <input
+                    name="full_name"
+                    type="text"
+                    className="input"
+                    placeholder="Optional"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="label">Role</label>
+                  <select name="role" className="input" defaultValue="user">
+                    <option value="user">User</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddUser(false)}
+                    className="btn btn-ghost flex-1 min-h-[44px]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={createUserMutation.isPending}
+                    className="btn btn-primary flex-1 min-h-[44px] flex items-center justify-center gap-2"
+                  >
+                    {createUserMutation.isPending && (
+                      <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    )}
+                    Create User
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </PageTransition>
   );
 }

@@ -5,7 +5,7 @@ from app.config import settings
 from app.core.google_auth import verify_google_token
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.user import User, UserRoleEnum, detect_department
-from app.schemas.user import CreateUser, LoginRequest, LoginResponse, UserOut
+from app.schemas.user import CreateUser, LoginRequest, LoginResponse, UpdateUser, UserOut
 
 
 def _verify_credentials(db: Session, email: str, password: str) -> User:
@@ -114,3 +114,35 @@ def get_user(db: Session, user_id: int) -> User:
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
     return user
+
+
+def update_user(db: Session, user_id: int, body: UpdateUser) -> User:
+    user = get_user(db, user_id)
+    data = body.model_dump(exclude_unset=True)
+
+    # Check email uniqueness if it's being changed.
+    if "email" in data and data["email"] != user.email:
+        existing = db.query(User).filter(User.email == data["email"]).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email already registered",
+            )
+
+    # Hash password if being updated.
+    if "password" in data:
+        data["password"] = hash_password(data["password"])
+
+    for field, value in data.items():
+        setattr(user, field, value)
+
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def soft_delete_user(db: Session, user_id: int) -> None:
+    """Deactivate user — set is_active=False, never hard delete."""
+    user = get_user(db, user_id)
+    user.is_active = False
+    db.commit()

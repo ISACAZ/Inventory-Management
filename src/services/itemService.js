@@ -20,7 +20,7 @@ export const itemService = {
   },
 
   updateItem(id, data) {
-    return apiClient.put(`/items/${id}`, data)
+    return apiClient.patch(`/items/${id}`, data)
   },
 
   deleteItem(id) {

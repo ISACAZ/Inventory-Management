@@ -14,6 +14,7 @@ from app.api.items import router as items_router
 from app.api.locations import router as locations_router
 from app.api.stats import router as stats_router
 from app.api.users import router as users_router
+from app.config import settings
 from app.database import Base, SessionLocal, engine
 
 
@@ -38,13 +39,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Laboratory Inventory Management API", lifespan=lifespan)
 
+cors_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://inventory-management-psi-amber.vercel.app",
-        "http://localhost:5173",
-        "http://localhost:4173",
-    ],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

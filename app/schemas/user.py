@@ -49,3 +49,11 @@ class Token(BaseModel):
 
     access_token: str
     token_type: str = "bearer"
+
+
+class UpdateUser(BaseModel):
+    full_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    email: Optional[EmailStr] = None
+    password: Optional[str] = Field(default=None, min_length=6)
+    role: Optional[UserRole] = None
+    is_active: Optional[bool] = None

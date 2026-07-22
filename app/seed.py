@@ -2,7 +2,8 @@ import csv, os
 from app.database import SessionLocal
 from app.models.item import Item
 
-CSV_PATH = "/app/data/equipment.csv"
+import pathlib
+CSV_PATH = str(pathlib.Path(__file__).resolve().parent.parent / "equipment.csv")
 
 def seed_if_empty() -> None:
     db = SessionLocal()

@@ -9,11 +9,10 @@ pydantic-settings>=2.6.0
 # Database
 sqlalchemy>=2.0.36
 psycopg2-binary>=2.9.9
-alembic>=1.13.1
 
 # Auth
 python-jose[cryptography]>=3.3.0
-passlib[bcrypt]>=1.7.4
+bcrypt>=4.0.0
 google-auth>=2.35.0
 requests>=2.32.0
 

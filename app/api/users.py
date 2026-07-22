@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_current_user, require_admin
 from app.models.user import User, UserRoleEnum
-from app.schemas.user import CreateUser, UserOut
+from app.schemas.user import CreateUser, UpdateUser, UserOut
 from app.services import auth_service
 
 
@@ -42,3 +42,24 @@ def get_user(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     user = auth_service.get_user(db, user_id)
     return UserOut.model_validate(user)
+
+
+@router.patch("/{user_id}", response_model=UserOut, status_code=status.HTTP_200_OK)
+def update_user(
+    user_id: int,
+    body: UpdateUser,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> UserOut:
+    user = auth_service.update_user(db, user_id, body)
+    return UserOut.model_validate(user)
+
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> Response:
+    auth_service.soft_delete_user(db, user_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

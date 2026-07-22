@@ -12,4 +12,16 @@ export const locationService = {
   getLocationItems(id) {
     return apiClient.get(`/locations/${id}/items`)
   },
+
+  createLocation(data) {
+    return apiClient.post('/locations', data)
+  },
+
+  updateLocation(id, data) {
+    return apiClient.patch(`/locations/${id}`, data)
+  },
+
+  deleteLocation(id) {
+    return apiClient.delete(`/locations/${id}`)
+  },
 }

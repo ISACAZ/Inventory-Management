@@ -44,7 +44,7 @@ def create_item(
     return ItemOut.model_validate(item_service.create_item(db, body))
 
 
-@router.put("/{item_id}", response_model=ItemOut, status_code=status.HTTP_200_OK)
+@router.patch("/{item_id}", response_model=ItemOut, status_code=status.HTTP_200_OK)
 def update_item(
     item_id: int,
     body: ItemUpdate,
