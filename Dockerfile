@@ -6,9 +6,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
-COPY equipment.csv /app/data/equipment.csv
-
-RUN mkdir -p /app/data
+COPY equipment.csv /app/equipment.csv
 
 EXPOSE 8000
 
