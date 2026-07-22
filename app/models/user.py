@@ -20,14 +20,14 @@ class UserRoleEnum(str, enum.Enum):
 def detect_department(email: str) -> str | None:
     """Determine faculty from KMUTL email pattern.
 
-    xx00xx@kmitl.ac.th → Mechatronics Engineering
-    xx10xx@kmitl.ac.th → Computer Engineering
-    xx20xx@kmitl.ac.th → Electronics and Electrical Engineering
+    xxxx00xx@kmitl.ac.th → Mechatronics Engineering
+    xxxx10xx@kmitl.ac.th → Computer Engineering
+    xxxx20xx@kmitl.ac.th → Electronics and Electrical Engineering
     """
     prefix = email.split("@")[0]
     if len(prefix) < 4:
         return None
-    code = prefix[2:4]
+    code = prefix[4:6]
     mapping = {
         "00": "Mechatronics Engineering",
         "10": "Computer Engineering",
