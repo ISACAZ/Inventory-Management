@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Menu,
@@ -11,6 +11,8 @@ import {
   ChevronRight,
   Home,
   Command,
+  BellOff,
+  Check,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn, getInitials } from "../lib/utils";
@@ -59,27 +61,10 @@ export default function Header({
   const notifRef = useRef(null);
   const searchInputRef = useRef(null);
 
-  // Mock notification count
-  const notificationCount = 3;
+  // ── Notification state backed by localStorage ──
+  const NOTIF_LS_KEY = "lab_header_notifications";
 
-  // Close menus on outside click
-  useEffect(() => {
-    function handleClick(e) {
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
-        setUserMenuOpen(false);
-      }
-      if (notifRef.current && !notifRef.current.contains(e.target)) {
-        setNotificationsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  // Cmd+K is handled globally by DashboardLayout — no duplicate listener here.
-
-  // Mock notifications
-  const notifications = [
+  const defaultNotifications = [
     {
       id: 1,
       title: "New item added",
@@ -103,6 +88,52 @@ export default function Header({
     },
   ];
 
+  function loadNotifications() {
+    try {
+      const stored = localStorage.getItem(NOTIF_LS_KEY);
+      return stored ? JSON.parse(stored) : defaultNotifications;
+    } catch {
+      return defaultNotifications;
+    }
+  }
+
+  const [notifications, setNotifications] = useState(loadNotifications);
+
+  // Persist notifications to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(NOTIF_LS_KEY, JSON.stringify(notifications));
+    } catch {}
+  }, [notifications]);
+
+  const notificationCount = notifications.filter((n) => n.unread).length;
+
+  const handleMarkOneRead = useCallback((id) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, unread: false } : n)),
+    );
+  }, []);
+
+  const handleMarkAllRead = useCallback(() => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+  }, []);
+
+  // Close menus on outside click
+  useEffect(() => {
+    function handleClick(e) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setUserMenuOpen(false);
+      }
+      if (notifRef.current && !notifRef.current.contains(e.target)) {
+        setNotificationsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  // Cmd+K is handled globally by DashboardLayout — no duplicate listener here.
+
   const userInitials = currentUser
     ? getInitials(currentUser.full_name || currentUser.name || "")
     : "??";
@@ -116,7 +147,10 @@ export default function Header({
     : "Guest";
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-gray-100 bg-white/80 backdrop-blur-md px-4 lg:px-6">
+    <header
+      className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-gray-100 backdrop-blur-md px-4 lg:px-6"
+      style={{ backgroundColor: 'var(--color-header-bg)' }}
+    >
       {/* Menu toggle (mobile) + breadcrumbs */}
       <div className="flex items-center gap-3 min-w-0 flex-1">
         {/* Mobile menu button */}
@@ -234,33 +268,51 @@ export default function Header({
                   <p className="text-sm font-semibold text-gray-900">
                     Notifications
                   </p>
-                  <button className="text-xs font-medium text-primary-600 hover:text-primary-700">
-                    Mark all read
-                  </button>
+                  {notificationCount > 0 && (
+                    <button
+                      onClick={handleMarkAllRead}
+                      className="text-xs font-medium text-primary-600 hover:text-primary-700 transition-colors"
+                    >
+                      Mark all read
+                    </button>
+                  )}
                 </div>
                 <div className="divide-y divide-gray-50">
-                  {notifications.map((n) => (
-                    <div
-                      key={n.id}
-                      className={cn(
-                        "flex gap-3 px-3 py-2.5 rounded-md transition-colors hover:bg-gray-50 cursor-pointer",
-                        n.unread && "bg-primary-50/50",
-                      )}
-                    >
-                      {n.unread && (
-                        <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-primary-500" />
-                      )}
-                      <div className={cn(!n.unread && "ml-4")}>
-                        <p className="text-sm font-medium text-gray-900">
-                          {n.title}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-0.5">{n.desc}</p>
-                        <p className="text-[10px] text-gray-400 mt-1">
-                          {n.time}
-                        </p>
-                      </div>
+                  {notifications.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2 py-8 text-gray-400">
+                      <BellOff className="h-8 w-8" />
+                      <p className="text-sm">No notifications</p>
                     </div>
-                  ))}
+                  ) : (
+                    notifications.map((n) => (
+                      <div
+                        key={n.id}
+                        onClick={() => handleMarkOneRead(n.id)}
+                        className={cn(
+                          "flex gap-3 px-3 py-2.5 rounded-md transition-colors hover:bg-gray-50 cursor-pointer group",
+                          n.unread && "bg-primary-50/50",
+                        )}
+                      >
+                        {n.unread ? (
+                          <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-primary-500" />
+                        ) : (
+                          <Check className="mt-1 h-3 w-3 flex-shrink-0 text-gray-300" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className={cn(
+                            "text-sm font-medium",
+                            n.unread ? "text-gray-900" : "text-gray-500",
+                          )}>
+                            {n.title}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-0.5">{n.desc}</p>
+                          <p className="text-[10px] text-gray-400 mt-1">
+                            {n.time}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
                 <div className="border-t border-gray-50 p-2">
                   <Link
@@ -268,7 +320,7 @@ export default function Header({
                     className="block text-center text-xs font-medium text-gray-500 hover:text-gray-700 rounded-md py-1.5 hover:bg-gray-50 transition-colors"
                     onClick={() => setNotificationsOpen(false)}
                   >
-                    View all notifications
+                    Notification settings
                   </Link>
                 </div>
               </motion.div>

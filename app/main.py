@@ -26,6 +26,10 @@ async def lifespan(app: FastAPI):
         db.execute(text("SELECT 1"))
         print("Database connected successfully")
         Base.metadata.create_all(bind=engine)
+
+        # ── Schema migrations (no Alembic — manual ALTER TABLE) ──
+        _run_migrations(db)
+
         from app.seed import seed_if_empty
         seed_if_empty()
     except Exception as e:
@@ -35,6 +39,32 @@ async def lifespan(app: FastAPI):
 
     yield
     # Shutdown — nothing to clean up right now.
+
+
+def _run_migrations(db):
+    """Apply missing schema changes for existing tables that were
+    already created by a previous run of ``create_all``.
+
+    Each migration is idempotent — safe to run on every startup.
+    """
+    is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+
+    # ── 2026-08-03: borrow_records.due_date ─────────────────
+    try:
+        if is_sqlite:
+            # SQLite: check via PRAGMA before ALTER (no IF NOT EXISTS for ADD COLUMN in older versions)
+            cols = [r[1] for r in db.execute(text("PRAGMA table_info('borrow_records')")).fetchall()]
+            if "due_date" not in cols:
+                db.execute(text("ALTER TABLE borrow_records ADD COLUMN due_date TIMESTAMP"))
+                db.commit()
+                print("Migration: added borrow_records.due_date")
+        else:
+            db.execute(text("ALTER TABLE borrow_records ADD COLUMN IF NOT EXISTS due_date TIMESTAMP"))
+            db.commit()
+            print("Migration: ensured borrow_records.due_date exists")
+    except Exception as exc:
+        db.rollback()
+        print(f"Migration note (due_date): {exc}")
 
 
 app = FastAPI(title="Laboratory Inventory Management API", lifespan=lifespan)

@@ -31,6 +31,7 @@ import {
 import PageTransition from "../components/PageTransition";
 import { cn } from "../lib/utils";
 import { useAuth } from "../hooks/useAuth";
+import { useTheme } from "../hooks/useTheme";
 import { userService } from "../services/userService";
 
 // ---- Constants ----
@@ -136,9 +137,8 @@ export default function Settings() {
     loadLS("lab_notifications", NOTIF_DEFAULTS),
   );
 
-  // Appearance state — persisted to localStorage
-  const [selectedTheme, setSelectedTheme] = useState(loadLS("lab_theme", "light"));
-  const [fontSize, setFontSize] = useState(loadLS("lab_fontsize", 16));
+  // Appearance state — driven by ThemeProvider
+  const { theme: selectedTheme, fontSize, setTheme: setSelectedTheme, setFontSize } = useTheme();
 
   // Security state
   const [passwordForm, setPasswordForm] = useState({ current: "", new: "", confirm: "" });
@@ -208,10 +208,8 @@ export default function Settings() {
   };
 
   const handleSaveAppearance = () => {
-    saveLS("lab_theme", selectedTheme);
-    saveLS("lab_fontsize", fontSize);
-    // Apply font size to root
-    document.documentElement.style.setProperty("--base-font-size", `${fontSize}px`);
+    // Theme and font size are already applied live via useTheme.
+    // Just show a confirmation toast.
     toast.success("Appearance saved", {
       description: `Theme: "${THEME_SWATCHES.find((t) => t.id === selectedTheme)?.name}", Font: ${fontSize}px`,
     });

@@ -4,7 +4,21 @@ export default {
   theme: {
     extend: {
       colors: {
-        surface: '#F5F5F3',
+        // ── Theme-aware overrides (use CSS custom properties) ──
+        surface: 'var(--color-surface)',
+        gray: {
+          50: 'var(--color-gray-50)',
+          100: 'var(--color-gray-100)',
+          200: 'var(--color-gray-200)',
+          300: 'var(--color-gray-300)',
+          400: 'var(--color-gray-400)',
+          500: 'var(--color-gray-500)',
+          600: 'var(--color-gray-600)',
+          700: 'var(--color-gray-700)',
+          800: 'var(--color-gray-800)',
+          900: 'var(--color-gray-900)',
+        },
+        // ── Brand colors (constant across themes) ──
         primary: {
           DEFAULT: '#7C8D7D',
           50: '#F5F6F5',
