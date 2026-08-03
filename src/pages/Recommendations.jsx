@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import {
   Sparkles,
   Package,
@@ -9,146 +11,22 @@ import {
   Plus,
   ShoppingCart,
   ArrowRight,
-  Tag,
-  Info,
   Filter,
   BarChart3,
   Zap,
   Star,
+  RefreshCw,
 } from "lucide-react";
 import PageTransition from "../components/PageTransition";
-import {
-  cn,
-  formatDate,
-  formatRelative,
-  formatCurrency,
-  getStatusColor,
-  getConditionColor,
-  truncate,
-} from "../lib/utils";
-import { recommendations, items } from "../data/mockData";
+import { cn, truncate } from "../lib/utils";
+import { statsService } from "../services/statsService";
+import { itemService } from "../services/itemService";
+import { Skeleton, ErrorState, EmptyState } from "../components/ui";
 
-// ---- Skeleton ----
-function Skeleton({ className }) {
-  return <div className={cn("skeleton", className)} />;
-}
-
-// ---- Recommended Item Card ----
-function RecommendationCard({
-  recommendation,
-  itemMap,
-  getItemName,
-  getItemImage,
-  onAddAll,
-}) {
-  const sourceItem = itemMap[recommendation.itemId];
-  const sourceName =
-    sourceItem?.name || recommendation.itemId || "Unknown Item";
-  const relatedItems = recommendation.relatedItemIds
-    .map((id) => itemMap[id])
-    .filter(Boolean);
-  const confidencePercent = Math.round((recommendation.confidence || 0) * 100);
-
-  const handleAddAll = (e) => {
-    e.stopPropagation();
-    onAddAll(recommendation);
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -3 }}
-      transition={{ duration: 0.3 }}
-      className="card card-interactive p-5 flex flex-col"
-    >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-50 text-accent-600">
-            <Sparkles className="h-4 w-4" />
-          </div>
-          <h3 className="font-semibold text-gray-900 leading-snug">
-            Borrowing <span className="text-accent-600">{sourceName}</span>?
-          </h3>
-        </div>
-        <span className="badge bg-accent-50 text-accent-700 font-semibold text-xs">
-          {confidencePercent}% match
-        </span>
-      </div>
-
-      {/* Related Items */}
-      <div className="flex-1 space-y-3 mb-4">
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-          You might also need:
-        </p>
-        {relatedItems.length === 0 ? (
-          <p className="text-sm text-gray-400 italic">
-            No related items found.
-          </p>
-        ) : (
-          relatedItems.slice(0, 4).map((item, idx) => (
-            <motion.div
-              key={item.id}
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: idx * 0.08 }}
-              className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <img
-                src={getItemImage(item)}
-                alt={item.name}
-                className="h-10 w-10 rounded-lg object-cover bg-gray-100 flex-shrink-0"
-                loading="lazy"
-                onError={(e) => {
-                  e.target.style.display = "none";
-                  e.target.nextSibling.style.display = "flex";
-                }}
-              />
-              <div
-                className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 flex-shrink-0"
-                style={{ display: "none" }}
-              >
-                <Package className="h-5 w-5 text-gray-400" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {item.name}
-                </p>
-                <p className="text-xs text-gray-500">{item.category}</p>
-              </div>
-            </motion.div>
-          ))
-        )}
-      </div>
-
-      {/* Reason */}
-      <div className="bg-gray-50 rounded-lg px-3 py-2 mb-3">
-        <p className="text-xs text-gray-600 leading-relaxed">
-          <span className="font-medium text-gray-700">Based on: </span>
-          {recommendation.reason}
-        </p>
-      </div>
-
-      {/* Actions */}
-      <button
-        onClick={handleAddAll}
-        className="btn btn-accent w-full"
-        disabled={relatedItems.length === 0}
-      >
-        <ShoppingCart className="h-4 w-4" />
-        Add all to borrow list
-        <ArrowRight className="h-4 w-4 ml-auto" />
-      </button>
-    </motion.div>
-  );
-}
-
-// ---- Course Filter ----
-function CourseFilter({ courses, selected, onChange }) {
+// ---- Category Filter ----
+function CategoryFilter({ categories, selected, onChange }) {
   const [isOpen, setIsOpen] = useState(false);
-
-  const selectedLabel = selected === "all" ? "All Courses" : selected;
+  const selectedLabel = selected === "all" ? "All Categories" : selected;
 
   return (
     <div className="relative">
@@ -172,21 +50,21 @@ function CourseFilter({ courses, selected, onChange }) {
             exit={{ opacity: 0, y: -4 }}
             className="absolute top-full mt-1 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-20 overflow-hidden"
           >
-            {courses.map((course) => (
+            {categories.map((cat) => (
               <button
-                key={course}
+                key={cat}
                 onClick={() => {
-                  onChange(course);
+                  onChange(cat);
                   setIsOpen(false);
                 }}
                 className={cn(
                   "w-full text-left px-4 py-2.5 text-sm transition-colors min-h-[44px] hover:bg-gray-50",
-                  selected === course
+                  selected === cat
                     ? "bg-primary-50 text-primary-700 font-medium"
                     : "text-gray-700",
                 )}
               >
-                {course === "all" ? "All Courses" : course}
+                {cat === "all" ? "All Categories" : cat}
               </button>
             ))}
           </motion.div>
@@ -196,12 +74,86 @@ function CourseFilter({ courses, selected, onChange }) {
   );
 }
 
-// ---- Frequently Borrowed Together Group ----
-function FBTGroup({ group, items, onAddAll, index }) {
-  const groupItems = group.items
-    .map((gi) => items.find((i) => i.id === gi.id))
-    .filter(Boolean);
+// ---- Recommendation Card ----
+function RecommendationCard({ recommendation, onBorrowAll }) {
+  const confidencePercent = Math.round((recommendation.confidence || 0) * 100);
 
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -3 }}
+      transition={{ duration: 0.3 }}
+      className="card card-interactive p-5 flex flex-col"
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-50 text-accent-600">
+            <Sparkles className="h-4 w-4" />
+          </div>
+          <h3 className="font-semibold text-gray-900 leading-snug">
+            Borrowing{" "}
+            <span className="text-accent-600">{recommendation.item_name}</span>?
+          </h3>
+        </div>
+        <span className="badge bg-accent-50 text-accent-700 font-semibold text-xs">
+          {confidencePercent}% match
+        </span>
+      </div>
+
+      {/* Related Items */}
+      <div className="flex-1 space-y-3 mb-4">
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+          You might also need:
+        </p>
+        {recommendation.related_items.length === 0 ? (
+          <p className="text-sm text-gray-400 italic">No related items found.</p>
+        ) : (
+          recommendation.related_items.slice(0, 4).map((item, idx) => (
+            <motion.div
+              key={item.id}
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: idx * 0.08 }}
+              className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 flex-shrink-0">
+                <Package className="h-5 w-5 text-gray-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
+                <p className="text-xs text-gray-500">{item.category}</p>
+              </div>
+            </motion.div>
+          ))
+        )}
+      </div>
+
+      {/* Reason */}
+      <div className="bg-gray-50 rounded-lg px-3 py-2 mb-3">
+        <p className="text-xs text-gray-600 leading-relaxed">
+          <span className="font-medium text-gray-700">Based on: </span>
+          {recommendation.reason}
+        </p>
+      </div>
+
+      {/* Actions */}
+      <button
+        onClick={() => onBorrowAll(recommendation)}
+        className="btn btn-accent w-full"
+        disabled={recommendation.related_items.length === 0}
+      >
+        <ShoppingCart className="h-4 w-4" />
+        Add all to borrow list
+        <ArrowRight className="h-4 w-4 ml-auto" />
+      </button>
+    </motion.div>
+  );
+}
+
+// ---- FBT Group — built from category clusters ----
+function FBTGroup({ group, onAddAll, index }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -216,7 +168,7 @@ function FBTGroup({ group, items, onAddAll, index }) {
             <h4 className="font-semibold text-gray-900">{group.groupName}</h4>
           </div>
           <p className="text-xs text-gray-500 mt-0.5">
-            {group.borrowCount} borrows &middot; {group.course}
+            {group.borrow_count} borrows &middot; {group.category}
           </p>
         </div>
         <button
@@ -228,18 +180,13 @@ function FBTGroup({ group, items, onAddAll, index }) {
         </button>
       </div>
       <div className="flex items-center gap-2 flex-wrap">
-        {groupItems.map((item, idx) => (
+        {group.items.map((item, idx) => (
           <React.Fragment key={item.id}>
-            {idx > 0 && (
-              <ArrowRight className="h-3 w-3 text-gray-300 flex-shrink-0" />
-            )}
+            {idx > 0 && <ArrowRight className="h-3 w-3 text-gray-300 flex-shrink-0" />}
             <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-2.5 py-1.5">
-              <img
-                src={item.image}
-                alt={item.name}
-                className="h-6 w-6 rounded object-cover bg-gray-200"
-                loading="lazy"
-              />
+              <div className="flex h-6 w-6 items-center justify-center rounded bg-gray-200 flex-shrink-0">
+                <Package className="h-3 w-3 text-gray-500" />
+              </div>
               <span className="text-xs font-medium text-gray-700">
                 {truncate(item.name, 20)}
               </span>
@@ -253,105 +200,75 @@ function FBTGroup({ group, items, onAddAll, index }) {
 
 // ---- Main Component ----
 export default function Recommendations() {
-  const [loading, setLoading] = useState(true);
-  const [selectedCourse, setSelectedCourse] = useState("all");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 700);
-    return () => clearTimeout(timer);
-  }, []);
+  const {
+    data: recommendations = [],
+    isLoading: recsLoading,
+    isError: recsError,
+    error: recsErr,
+    refetch,
+  } = useQuery({
+    queryKey: ["recommendations"],
+    queryFn: () => statsService.getRecommendations(12),
+    staleTime: 5 * 60 * 1000,
+  });
 
-  const itemMap = useMemo(() => {
-    const map = {};
-    items.forEach((item) => {
-      map[item.id] = item;
-    });
-    return map;
-  }, []);
-
-  const getItemName = (id) => itemMap[id]?.name || id;
-  const getItemImage = (item) =>
-    item?.image ||
-    `https://picsum.photos/seed/${item?.id || "default"}/100/100`;
-
-  // Extract unique courses from recommendations basedOn field
-  const courses = useMemo(() => {
-    const courseSet = new Set(["all"]);
+  // Extract unique categories from recommendations
+  const categories = useMemo(() => {
+    const cats = new Set(["all"]);
     recommendations.forEach((rec) => {
-      const match = rec.basedOn?.match(
-        /([A-Z]{2,4}\s?\d{2,4}(?:\/[A-Z]{2,4}\s?\d{2,4})*)/g,
-      );
-      if (match) {
-        match.forEach((c) => courseSet.add(c));
-      }
+      if (rec.category) cats.add(rec.category);
     });
-    // Add some default courses for filtering UX
-    const extras = ["ECE 201", "ECE 351", "ECE 440", "ECE 211"];
-    extras.forEach((c) => courseSet.add(c));
-    return Array.from(courseSet);
-  }, []);
+    return Array.from(cats);
+  }, [recommendations]);
 
   const filteredRecommendations = useMemo(() => {
-    if (selectedCourse === "all") return recommendations;
-    return recommendations.filter((rec) =>
-      rec.basedOn?.includes(selectedCourse),
-    );
-  }, [selectedCourse]);
+    if (selectedCategory === "all") return recommendations;
+    return recommendations.filter((rec) => rec.category === selectedCategory);
+  }, [recommendations, selectedCategory]);
 
-  // Frequently borrowed together (built from patterns in recommendations)
+  // Build FBT groups: cluster first item + related items as a set
   const frequentlyBorrowedTogether = useMemo(() => {
-    const groups = [];
-    const seen = new Set();
-
-    recommendations.forEach((rec) => {
-      const sourceItem = itemMap[rec.itemId];
-      if (!sourceItem || seen.has(rec.itemId)) return;
-      const relatedItems = rec.relatedItemIds
-        .map((id) => itemMap[id])
-        .filter(Boolean);
-
-      if (relatedItems.length >= 2) {
-        seen.add(rec.itemId);
-        const courseMatch = rec.basedOn?.match(
-          /([A-Z]{2,4}\s?\d{2,4}(?:\/[A-Z]{2,4}\s?\d{2,4})*)/,
-        );
-        groups.push({
-          id: rec.id,
-          groupName: `${sourceItem.name} Bundle`,
-          borrowCount:
-            sourceItem.borrowCount || Math.floor(rec.confidence * 50),
-          course: courseMatch ? courseMatch[0] : "General",
-          items: [
-            { id: sourceItem.id, name: sourceItem.name },
-            ...relatedItems.map((ri) => ({ id: ri.id, name: ri.name })),
-          ],
-        });
-      }
-    });
-    return groups.slice(0, 6);
-  }, [itemMap]);
+    return recommendations
+      .filter((rec) => rec.related_items.length >= 2)
+      .slice(0, 6)
+      .map((rec) => ({
+        id: rec.id,
+        groupName: `${rec.item_name} Bundle`,
+        borrow_count: rec.borrow_count,
+        category: rec.category,
+        items: [
+          { id: rec.item_id, name: rec.item_name },
+          ...rec.related_items.map((ri) => ({ id: ri.id, name: ri.name })),
+        ],
+      }));
+  }, [recommendations]);
 
   const handleAddAll = (rec) => {
-    const sourceName = getItemName(rec.itemId);
-    const relatedCount = rec.relatedItemIds?.length || 0;
-    toast.success(
-      `Added ${sourceName} and ${relatedCount} related items to borrow list`,
-      {
-        description: `${relatedCount + 1} items will be available for checkout`,
-        duration: 3000,
+    toast.success(`Added ${rec.item_name} and ${rec.related_items?.length || 0} related items`, {
+      description: `${(rec.related_items?.length || 0) + 1} items ready for checkout`,
+      action: {
+        label: "Go to Borrow",
+        onClick: () => navigate("/borrow"),
       },
-    );
+      duration: 4000,
+    });
   };
 
   const handleAddSet = (group) => {
-    toast.success(`Added "${group.groupName}" set to borrow list`, {
+    toast.success(`Added "${group.groupName}" set`, {
       description: `${group.items.length} items ready for checkout`,
-      duration: 3000,
+      action: {
+        label: "Go to Borrow",
+        onClick: () => navigate("/borrow"),
+      },
+      duration: 4000,
     });
   };
 
-  // Loading state
-  if (loading) {
+  if (recsLoading) {
     return (
       <PageTransition>
         <div className="page-container space-y-6">
@@ -382,6 +299,16 @@ export default function Recommendations() {
     );
   }
 
+  if (recsError) {
+    return (
+      <PageTransition>
+        <div className="page-container">
+          <ErrorState message={recsErr?.message} onRetry={refetch} />
+        </div>
+      </PageTransition>
+    );
+  }
+
   return (
     <PageTransition>
       <div className="page-container space-y-6">
@@ -397,46 +324,35 @@ export default function Recommendations() {
               </h1>
             </div>
             <p className="text-sm text-gray-500 max-w-2xl">
-              Based on borrowing patterns and course requirements. We analyze
-              checkout data to suggest complementary equipment you might need.
+              Based on real borrowing patterns in the inventory. We analyze checkout
+              data to suggest complementary equipment you might need.
             </p>
           </div>
-          <CourseFilter
-            courses={courses}
-            selected={selectedCourse}
-            onChange={setSelectedCourse}
+          <CategoryFilter
+            categories={categories}
+            selected={selectedCategory}
+            onChange={setSelectedCategory}
           />
         </div>
 
         {/* Recommendations Grid */}
         {filteredRecommendations.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="card flex flex-col items-center justify-center py-16 px-4"
-          >
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 mb-4">
-              <Sparkles className="h-8 w-8 text-gray-400" />
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-1">
-              No recommendations found
-            </h3>
-            <p className="text-sm text-gray-500 text-center max-w-sm">
-              {selectedCourse === "all"
-                ? "No recommendations available for the current data."
-                : `No recommendations found for ${selectedCourse}. Try selecting "All Courses".`}
-            </p>
-          </motion.div>
+          <EmptyState
+            icon={Sparkles}
+            title="No Recommendations Yet"
+            description={
+              selectedCategory === "all"
+                ? "Recommendations will appear once items have been borrowed. Try borrowing some equipment first!"
+                : `No recommendations found for "${selectedCategory}". Try selecting "All Categories".`
+            }
+          />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {filteredRecommendations.map((rec) => (
               <RecommendationCard
                 key={rec.id}
                 recommendation={rec}
-                itemMap={itemMap}
-                getItemName={getItemName}
-                getItemImage={getItemImage}
-                onAddAll={handleAddAll}
+                onBorrowAll={handleAddAll}
               />
             ))}
           </div>
@@ -461,7 +377,6 @@ export default function Recommendations() {
                 <FBTGroup
                   key={group.id}
                   group={group}
-                  items={items}
                   onAddAll={handleAddSet}
                   index={idx}
                 />

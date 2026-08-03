@@ -23,6 +23,7 @@ import {
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import PageTransition from "../components/PageTransition";
+import AddItemModal from "../components/AddItemModal";
 import {
   cn,
   formatDate,
@@ -63,6 +64,7 @@ export default function Inventory() {
   const [favorites, setFavorites] = useState(new Set());
   const debounceRef = useRef(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const {
     data: apiItems = [],
@@ -330,7 +332,10 @@ export default function Inventory() {
             >
               <Download className="h-4 w-4" /> Export
             </button>
-            <button className="btn btn-primary text-sm px-3">
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="btn btn-primary text-sm px-3"
+            >
               <Plus className="h-4 w-4" /> Add Item
             </button>
           </div>
@@ -547,8 +552,8 @@ export default function Inventory() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
-                    toast.success(`${selectedItems.size} items queued for borrow`);
-                    navigate('/borrow');
+                    const selected = enrichedItems.filter((i) => selectedItems.has(i.id));
+                    navigate('/borrow', { state: { selectedItems: selected } });
                   }}
                   className="btn btn-primary text-sm px-3 h-9"
                 >
@@ -687,8 +692,7 @@ export default function Inventory() {
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            toast.success(`${item.name} added to borrow list`);
-                            navigate('/borrow');
+                            navigate('/borrow', { state: { selectedItem: item } });
                           }}
                           className="btn btn-primary text-xs px-3 py-1.5 h-8"
                         >
@@ -866,8 +870,7 @@ export default function Inventory() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                toast.success(`${item.name} added to borrow list`);
-                                navigate('/borrow');
+                                navigate('/borrow', { state: { selectedItem: item } });
                               }}
                               className="btn btn-primary text-xs px-3 py-1.5 h-8"
                             >
@@ -935,6 +938,8 @@ export default function Inventory() {
           </div>
         )}
       </div>
+
+      <AddItemModal open={showAddModal} onClose={() => setShowAddModal(false)} />
     </PageTransition>
   );
 }

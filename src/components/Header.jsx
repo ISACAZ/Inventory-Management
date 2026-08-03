@@ -76,19 +76,7 @@ export default function Header({
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // Cmd+K listener on the search input - opens command palette
-  useEffect(() => {
-    function handleKeyDown(e) {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        if (onCommandPaletteOpen) {
-          onCommandPaletteOpen();
-        }
-      }
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onCommandPaletteOpen]);
+  // Cmd+K is handled globally by DashboardLayout — no duplicate listener here.
 
   // Mock notifications
   const notifications = [

@@ -13,6 +13,11 @@ export const userService = {
     return apiClient.get(`/users/${id}`)
   },
 
+  /** Update own profile (full_name only — no admin required). */
+  updateMe(data) {
+    return apiClient.patch('/users/me', data)
+  },
+
   createUser(data) {
     return apiClient.post('/users', data)
   },

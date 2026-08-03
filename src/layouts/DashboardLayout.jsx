@@ -62,10 +62,7 @@ export default function DashboardLayout() {
         />
 
         {/* Page content */}
-        <main
-          className="flex-1 overflow-y-auto scrollbar-thin"
-          key={location.pathname}
-        >
+        <main className="flex-1 overflow-y-auto scrollbar-thin">
           <div className="page-container">
             <Outlet />
           </div>

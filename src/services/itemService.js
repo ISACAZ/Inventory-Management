@@ -7,6 +7,7 @@ export const itemService = {
     if (params.limit !== undefined) query.set('limit', params.limit)
     if (params.category) query.set('category', params.category)
     if (params.location_id) query.set('location_id', params.location_id)
+    if (params.q) query.set('q', params.q)
     const qs = query.toString()
     return apiClient.get(`/items${qs ? `?${qs}` : ''}`)
   },

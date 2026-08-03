@@ -28,6 +28,7 @@ class BorrowRecord(Base):
     status = Column(SAEnum(BorrowStatus), nullable=False, default=BorrowStatus.borrowed, index=True)
 
     borrowed_at = Column(DateTime, nullable=False, default=_utcnow)
+    due_date = Column(DateTime, nullable=True)
     returned_at = Column(DateTime, nullable=True)
     note = Column(String(500), nullable=True)
 

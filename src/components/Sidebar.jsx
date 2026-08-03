@@ -20,7 +20,7 @@ import {
 import { cn, getInitials } from "../lib/utils";
 import { useAuth } from "../hooks/useAuth";
 
-const navigationItems = [
+const allNavItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/inventory", label: "Inventory", icon: Package },
   { to: "/borrow", label: "Borrow / Return", icon: ArrowLeftRight },
@@ -31,7 +31,7 @@ const navigationItems = [
   { to: "/recommendations", label: "Recommendations", icon: Lightbulb },
   { to: "/leaderboard", label: "Leaderboard", icon: Trophy },
   { to: "/reports", label: "Reports", icon: FileText },
-  { to: "/admin", label: "Admin", icon: Shield },
+  { to: "/admin", label: "Admin", icon: Shield, adminOnly: true },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -126,7 +126,9 @@ export default function Sidebar({
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto scrollbar-thin py-4 px-2 space-y-0.5">
-          {navigationItems.map((item) => {
+          {allNavItems
+            .filter((item) => !item.adminOnly || currentUser?.role === "admin")
+            .map((item) => {
             const isActive =
               location.pathname === item.to ||
               (item.to !== "/" && location.pathname.startsWith(item.to));

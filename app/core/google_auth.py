@@ -21,6 +21,12 @@ def verify_google_token(credential: str, client_id: str) -> dict:
             detail="Invalid token issuer",
         )
 
+    if not info.get("email_verified", False):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google account email is not verified",
+        )
+
     email = info.get("email", "")
     if not email.lower().endswith(ALLOWED_DOMAIN):
         raise HTTPException(

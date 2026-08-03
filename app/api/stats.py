@@ -49,3 +49,21 @@ def get_low_stock(
     _: User = Depends(get_current_user),
 ) -> list[LowStockOut]:
     return stats_service.low_stock(db)
+
+
+@router.get("/leaderboard", status_code=status.HTTP_200_OK)
+def get_leaderboard(
+    limit: int = Query(default=10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[dict]:
+    return stats_service.leaderboard(db, limit=limit)
+
+
+@router.get("/recommendations", status_code=status.HTTP_200_OK)
+def get_recommendations(
+    limit: int = Query(default=12, ge=1, le=50),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[dict]:
+    return stats_service.recommendations(db, limit=limit)

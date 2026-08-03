@@ -31,6 +31,20 @@ async function request(endpoint, options = {}) {
   const data = await res.json();
 
   if (!res.ok) {
+    // Auto-logout on 401 — token expired or invalid.
+    if (res.status === 401) {
+      try {
+        localStorage.removeItem("lab_token");
+        localStorage.removeItem("lab_currentUser");
+      } catch {
+        // localStorage may be unavailable.
+      }
+      // Redirect to login unless already there.
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
+    }
+
     const message = data?.detail || `Request failed with status ${res.status}`;
     const error = new Error(message);
     error.status = res.status;

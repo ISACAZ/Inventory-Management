@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import {
   Trophy,
   Medal,
@@ -17,34 +17,18 @@ import {
   TrendingUp,
   Users,
   Award,
-  ChevronRight,
   Sparkles,
   Sun,
   Lock,
   BarChart3,
-  Calendar,
-  Clock,
-  Filter,
+  RefreshCw,
 } from "lucide-react";
 import PageTransition from "../components/PageTransition";
-import {
-  cn,
-  formatDate,
-  formatRelative,
-  formatCurrency,
-  getStatusColor,
-  getConditionColor,
-  truncate,
-} from "../lib/utils";
-import { leaderboardUsers, items, departmentUsage } from "../data/mockData";
+import { cn } from "../lib/utils";
+import { statsService } from "../services/statsService";
+import { Skeleton, ErrorState, EmptyState } from "../components/ui";
 
 // ---- Constants ----
-const PERIODS = [
-  { id: "month", label: "This Month" },
-  { id: "semester", label: "This Semester" },
-  { id: "all", label: "All Time" },
-];
-
 const TABS = [
   { id: "individual", label: "Individual Rankings", icon: Users },
   { id: "department", label: "Department Rankings", icon: BarChart3 },
@@ -82,13 +66,15 @@ const ALL_BADGES = [
     description: "Return items before due date 10 times",
     icon: Sun,
     points: 100,
+    threshold: 5,
   },
   {
     id: "power-borrower",
     name: "Power Borrower",
-    description: "Borrow 50+ items total",
+    description: "Borrow 20+ items total",
     icon: Zap,
     points: 200,
+    threshold: 20,
   },
   {
     id: "perfect-return",
@@ -96,13 +82,15 @@ const ALL_BADGES = [
     description: "Zero late returns for 3 months",
     icon: CheckCircle,
     points: 150,
+    threshold: 10,
   },
   {
     id: "lab-star",
     name: "Lab Star",
-    description: "Complete 5 lab courses with perfect record",
+    description: "Top 3 borrowers in any week",
     icon: Star,
     points: 300,
+    threshold: 30,
   },
   {
     id: "community-helper",
@@ -110,6 +98,7 @@ const ALL_BADGES = [
     description: "Help 10 other students with equipment",
     icon: Heart,
     points: 100,
+    threshold: 15,
   },
   {
     id: "helper-badge",
@@ -117,6 +106,7 @@ const ALL_BADGES = [
     description: "Assist lab staff 5 times",
     icon: Handshake,
     points: 80,
+    threshold: 8,
   },
   {
     id: "streak-master",
@@ -124,6 +114,7 @@ const ALL_BADGES = [
     description: "30-day borrowing streak",
     icon: Flame,
     points: 250,
+    threshold: 25,
   },
   {
     id: "inventory-guru",
@@ -131,6 +122,7 @@ const ALL_BADGES = [
     description: "Know all lab equipment locations",
     icon: MapPin,
     points: 150,
+    threshold: 12,
   },
   {
     id: "safety-first",
@@ -138,6 +130,7 @@ const ALL_BADGES = [
     description: "Complete all safety training modules",
     icon: Shield,
     points: 100,
+    threshold: 6,
   },
   {
     id: "data-wizard",
@@ -145,18 +138,15 @@ const ALL_BADGES = [
     description: "Submit 20 accurate data logs",
     icon: Database,
     points: 120,
+    threshold: 20,
   },
 ];
-
-// ---- Skeleton ----
-function Skeleton({ className }) {
-  return <div className={cn("skeleton", className)} />;
-}
 
 // ---- Podium Card ----
 function PodiumCard({ user, rank, index }) {
   const colors = PODIUM_COLORS[rank] || PODIUM_COLORS[3];
   const isFirst = rank === 1;
+  const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=7C8D7D&color=fff&size=128`;
 
   return (
     <motion.div
@@ -173,7 +163,6 @@ function PodiumCard({ user, rank, index }) {
             : "order-3",
       )}
     >
-      {/* Crown for #1 */}
       {isFirst && (
         <div className="absolute -top-4 left-1/2 -translate-x-1/2">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-yellow-400 text-white shadow-lg">
@@ -182,73 +171,55 @@ function PodiumCard({ user, rank, index }) {
         </div>
       )}
 
-      {/* Rank badge */}
       <div
         className={cn(
-          "flex h-12 w-12 items-center justify-center rounded-full text-2xl font-bold mb-3",
+          "flex h-12 w-12 items-center justify-center rounded-full text-2xl font-bold mb-3 text-white",
           colors.accent,
-          rank === 1 ? "text-white" : "text-white",
         )}
       >
         {rank}
       </div>
 
-      {/* Avatar */}
       <img
-        src={
-          user.avatar ||
-          `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=7C8D7D&color=fff&size=128`
-        }
+        src={avatarUrl}
         alt={user.name}
         className="h-16 w-16 rounded-full object-cover border-2 border-white shadow-md mb-3"
         loading="lazy"
       />
 
-      {/* Name */}
       <h3 className="font-semibold text-gray-900 mb-0.5">{user.name}</h3>
       <p className="text-xs text-gray-500 mb-2">{user.department}</p>
 
-      {/* Points */}
       <div className="flex items-center gap-1 mb-2">
-        <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-        <span className="text-lg font-bold text-gray-900">
-          {user.points.toLocaleString()}
-        </span>
-        <span className="text-xs text-gray-400">pts</span>
+        <BarChart3 className="h-4 w-4 text-primary-500" />
+        <span className="text-lg font-bold text-gray-900">{user.borrow_count}</span>
+        <span className="text-xs text-gray-400">borrows</span>
       </div>
 
-      {/* Badges */}
-      <div className="flex items-center gap-1 flex-wrap justify-center mb-2">
-        {user.badges.slice(0, 3).map((badge, i) => (
-          <span
-            key={i}
-            className="badge bg-primary-50 text-primary-700 text-[10px]"
-          >
-            {typeof badge === "string" ? badge : badge.name}
-          </span>
-        ))}
-        {user.badges.length > 3 && (
-          <span className="text-[10px] text-gray-400">
-            +{user.badges.length - 3}
-          </span>
-        )}
+      {/* Earned badges based on borrow_count */}
+      <div className="flex items-center gap-1 flex-wrap justify-center">
+        {ALL_BADGES.filter((b) => user.borrow_count >= b.threshold)
+          .slice(0, 3)
+          .map((badge) => (
+            <span
+              key={badge.id}
+              className="badge bg-primary-50 text-primary-700 text-[10px]"
+            >
+              {badge.name}
+            </span>
+          ))}
       </div>
-
-      {/* Streak */}
-      {user.streak > 0 && (
-        <div className="flex items-center gap-1 mt-auto">
-          <Flame className="h-3.5 w-3.5 text-orange-500" />
-          <span className="text-xs font-medium text-orange-600">
-            {user.streak} day streak
-          </span>
-        </div>
-      )}
     </motion.div>
   );
 }
 
 // ---- Ranked List Item ----
 function RankedListItem({ user, rank, index }) {
+  const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=7C8D7D&color=fff&size=64`;
+  const earnedBadgeCount = ALL_BADGES.filter(
+    (b) => user.borrow_count >= b.threshold,
+  ).length;
+
   return (
     <motion.div
       initial={{ opacity: 0, x: -16 }}
@@ -257,56 +228,38 @@ function RankedListItem({ user, rank, index }) {
       whileHover={{ x: 4 }}
       className="flex items-center gap-4 px-5 py-3 hover:bg-gray-50 transition-colors rounded-lg"
     >
-      {/* Rank */}
       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-sm font-bold text-gray-600 flex-shrink-0">
         {rank}
       </div>
 
-      {/* Avatar */}
       <img
-        src={
-          user.avatar ||
-          `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=7C8D7D&color=fff&size=64`
-        }
+        src={avatarUrl}
         alt={user.name}
         className="h-10 w-10 rounded-full object-cover flex-shrink-0"
         loading="lazy"
       />
 
-      {/* Info */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-gray-900">{user.name}</p>
         <p className="text-xs text-gray-500">{user.department}</p>
       </div>
 
-      {/* Badges count */}
       <div className="flex items-center gap-1 text-xs text-gray-500">
         <Award className="h-3.5 w-3.5" />
-        {user.badges.length}
+        {earnedBadgeCount}
       </div>
 
-      {/* Streak */}
-      {user.streak > 0 && (
-        <div className="flex items-center gap-1 text-xs text-orange-600">
-          <Flame className="h-3.5 w-3.5" />
-          {user.streak}d
-        </div>
-      )}
-
-      {/* Points */}
       <div className="text-right flex-shrink-0 w-24">
-        <p className="text-sm font-bold text-gray-900">
-          {user.points.toLocaleString()}
-        </p>
-        <p className="text-[10px] text-gray-400">points</p>
+        <p className="text-sm font-bold text-gray-900">{user.borrow_count}</p>
+        <p className="text-[10px] text-gray-400">borrows</p>
       </div>
     </motion.div>
   );
 }
 
 // ---- Department Bar ----
-function DepartmentBar({ dept, maxPoints, index }) {
-  const percent = maxPoints > 0 ? (dept.totalPoints / maxPoints) * 100 : 0;
+function DepartmentBar({ dept, maxBorrows, index }) {
+  const percent = maxBorrows > 0 ? (dept.total_borrows / maxBorrows) * 100 : 0;
 
   return (
     <motion.div
@@ -317,24 +270,18 @@ function DepartmentBar({ dept, maxPoints, index }) {
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-700">{dept.name}</span>
-          <span className="text-xs text-gray-400">
-            ({dept.memberCount} members)
-          </span>
+          <span className="text-sm font-medium text-gray-700">{dept.department}</span>
+          <span className="text-xs text-gray-400">({dept.member_count} members)</span>
         </div>
         <span className="text-sm font-semibold text-gray-900">
-          {dept.totalPoints.toLocaleString()} pts
+          {dept.total_borrows} borrows
         </span>
       </div>
       <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${percent}%` }}
-          transition={{
-            delay: index * 0.1 + 0.3,
-            duration: 0.6,
-            ease: "easeOut",
-          }}
+          transition={{ delay: index * 0.1 + 0.3, duration: 0.6, ease: "easeOut" }}
           className={cn(
             "h-full rounded-full",
             index === 0
@@ -346,8 +293,8 @@ function DepartmentBar({ dept, maxPoints, index }) {
         />
       </div>
       <div className="flex justify-between text-xs text-gray-400">
-        <span>Avg: {dept.avgPoints} pts/member</span>
-        <span>Rank #{dept.rank}</span>
+        <span>Avg: {dept.avg_borrows} borrows/member</span>
+        <span>Rank #{index + 1}</span>
       </div>
     </motion.div>
   );
@@ -371,9 +318,7 @@ function BadgeCard({ badge, earned, index }) {
       <div
         className={cn(
           "flex h-12 w-12 items-center justify-center rounded-full mb-3",
-          earned
-            ? "bg-primary-50 text-primary-600"
-            : "bg-gray-100 text-gray-400",
+          earned ? "bg-primary-50 text-primary-600" : "bg-gray-100 text-gray-400",
         )}
       >
         {earned ? <Icon className="h-6 w-6" /> : <Lock className="h-6 w-6" />}
@@ -382,14 +327,10 @@ function BadgeCard({ badge, earned, index }) {
       <p className="text-xs text-gray-500 mb-2">{badge.description}</p>
       <div className="flex items-center gap-1">
         <Star className="h-3 w-3 text-yellow-500" />
-        <span className="text-xs font-medium text-gray-700">
-          {badge.points} pts
-        </span>
+        <span className="text-xs font-medium text-gray-700">{badge.points} pts</span>
       </div>
       {!earned && (
-        <span className="badge bg-gray-100 text-gray-500 mt-2 text-[10px]">
-          Locked
-        </span>
+        <span className="badge bg-gray-100 text-gray-500 mt-2 text-[10px]">Locked</span>
       )}
     </motion.div>
   );
@@ -397,89 +338,53 @@ function BadgeCard({ badge, earned, index }) {
 
 // ---- Main Component ----
 export default function Leaderboard() {
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("individual");
-  const [period, setPeriod] = useState("all");
 
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 700);
-    return () => clearTimeout(timer);
-  }, []);
+  const {
+    data: leaderboardData = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["leaderboard"],
+    queryFn: () => statsService.getLeaderboard(20),
+    staleTime: 2 * 60 * 1000,
+  });
 
-  // Compute department rankings from departmentUsage
+  // Derive department rankings from real leaderboard data
   const departmentRankings = useMemo(() => {
-    if (!departmentUsage || departmentUsage.length === 0) {
-      return [
-        {
-          name: "Electrical and Computer Engineering",
-          totalPoints: 8990,
-          memberCount: 48,
-          avgPoints: 187,
-          rank: 1,
-        },
-        {
-          name: "Biology",
-          totalPoints: 7230,
-          memberCount: 42,
-          avgPoints: 172,
-          rank: 2,
-        },
-        {
-          name: "Physics",
-          totalPoints: 5620,
-          memberCount: 35,
-          avgPoints: 160,
-          rank: 3,
-        },
-      ];
-    }
-
-    // Sort by value and create rankings
-    return departmentUsage
-      .map((d, i) => ({
-        name: d.name,
-        totalPoints: d.value * 100,
-        memberCount: Math.floor(d.value * 6),
-        avgPoints: Math.round(d.value * 20),
-        rank: i + 1,
-      }))
-      .sort((a, b) => b.totalPoints - a.totalPoints)
-      .map((d, i) => ({ ...d, rank: i + 1 }));
-  }, []);
-
-  const maxDeptPoints = Math.max(
-    ...departmentRankings.map((d) => d.totalPoints),
-    1,
-  );
-
-  // Get earned badge IDs from top users (all badges that have been earned by someone)
-  const earnedBadgeIds = useMemo(() => {
-    const earned = new Set();
-    leaderboardUsers.forEach((u) => {
-      u.badges.forEach((b) => {
-        if (typeof b === "string") earned.add(b);
-        else earned.add(b.id || b);
-      });
+    if (!leaderboardData.length) return [];
+    const deptMap = {};
+    leaderboardData.forEach((user) => {
+      const dept = user.department || "Unknown";
+      if (!deptMap[dept]) {
+        deptMap[dept] = { department: dept, total_borrows: 0, member_count: 0 };
+      }
+      deptMap[dept].total_borrows += user.borrow_count;
+      deptMap[dept].member_count += 1;
     });
-    return earned;
-  }, []);
+    return Object.values(deptMap)
+      .map((d) => ({
+        ...d,
+        avg_borrows: Math.round(d.total_borrows / d.member_count),
+      }))
+      .sort((a, b) => b.total_borrows - a.total_borrows);
+  }, [leaderboardData]);
 
-  // Top 3 podium users
-  const podiumUsers = useMemo(() => {
-    return leaderboardUsers
-      .filter((u) => u.rank <= 3)
-      .sort((a, b) => a.rank - b.rank);
-  }, []);
+  const maxDeptBorrows = Math.max(...departmentRankings.map((d) => d.total_borrows), 1);
 
-  // Rest of ranked users (4-10)
-  const rankedUsers = useMemo(() => {
-    return leaderboardUsers
-      .filter((u) => u.rank >= 4 && u.rank <= 10)
-      .sort((a, b) => a.rank - b.rank);
-  }, []);
+  // Earned badges for the current community (based on top user's borrow count)
+  const earnedBadgeIds = useMemo(() => {
+    const maxBorrows = leaderboardData.length > 0 ? leaderboardData[0].borrow_count : 0;
+    return new Set(ALL_BADGES.filter((b) => maxBorrows >= b.threshold).map((b) => b.id));
+  }, [leaderboardData]);
+
+  const podiumUsers = leaderboardData.slice(0, 3);
+  const rankedUsers = leaderboardData.slice(3, 10);
 
   // Loading state
-  if (loading) {
+  if (isLoading) {
     return (
       <PageTransition>
         <div className="page-container space-y-6">
@@ -487,11 +392,6 @@ export default function Leaderboard() {
             <div className="space-y-2">
               <Skeleton className="h-8 w-64" />
               <Skeleton className="h-4 w-80" />
-            </div>
-            <div className="flex gap-2">
-              {[...Array(3)].map((_, i) => (
-                <Skeleton key={i} className="h-9 w-28 rounded-lg" />
-              ))}
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -504,6 +404,16 @@ export default function Leaderboard() {
               <Skeleton key={i} className="h-14 w-full" />
             ))}
           </div>
+        </div>
+      </PageTransition>
+    );
+  }
+
+  if (isError) {
+    return (
+      <PageTransition>
+        <div className="page-container">
+          <ErrorState message={error?.message} onRetry={refetch} />
         </div>
       </PageTransition>
     );
@@ -522,25 +432,8 @@ export default function Leaderboard() {
               <h1 className="text-2xl font-bold text-gray-900">Leaderboard</h1>
             </div>
             <p className="text-sm text-gray-500">
-              See who's leading the lab with points, badges, and achievements
+              Live rankings based on real borrow activity — updated in real time
             </p>
-          </div>
-          {/* Period filter */}
-          <div className="flex bg-gray-100 rounded-lg p-1">
-            {PERIODS.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setPeriod(p.id)}
-                className={cn(
-                  "px-4 py-2 text-sm font-medium rounded-md transition-all min-h-[44px] focus-visible:outline-2 focus-visible:outline-primary-500",
-                  period === p.id
-                    ? "bg-white text-gray-900 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700",
-                )}
-              >
-                {p.label}
-              </button>
-            ))}
           </div>
         </div>
 
@@ -551,7 +444,7 @@ export default function Leaderboard() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "relative flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors min-h-[44px] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-500",
+                "relative flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors min-h-[44px]",
                 activeTab === tab.id
                   ? "text-primary-600"
                   : "text-gray-500 hover:text-gray-700",
@@ -570,8 +463,9 @@ export default function Leaderboard() {
           ))}
         </div>
 
-        {/* Individual Rankings Tab */}
+        {/* Tab content */}
         <AnimatePresence mode="wait">
+          {/* Individual Rankings */}
           {activeTab === "individual" && (
             <motion.div
               key="individual"
@@ -580,49 +474,52 @@ export default function Leaderboard() {
               exit={{ opacity: 0, y: -12 }}
               className="space-y-6"
             >
-              {/* Podium - Top 3 */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                {podiumUsers.map((user, i) => (
-                  <PodiumCard
-                    key={user.id || user.userId}
-                    user={user}
-                    rank={user.rank}
-                    index={i}
-                  />
-                ))}
-              </div>
-
-              {/* Ranked List 4-10 */}
-              <div className="card p-0 overflow-hidden">
-                <div className="px-5 py-4 border-b border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
-                    Rankings 4–10
-                  </h3>
-                </div>
-                <div className="divide-y divide-gray-50">
-                  {rankedUsers.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 px-4">
-                      <Users className="h-8 w-8 text-gray-300 mb-2" />
-                      <p className="text-sm text-gray-500">
-                        No more ranked users
-                      </p>
-                    </div>
-                  ) : (
-                    rankedUsers.map((user, i) => (
-                      <RankedListItem
-                        key={user.id || user.userId}
+              {leaderboardData.length === 0 ? (
+                <EmptyState
+                  icon={Trophy}
+                  title="No Borrows Yet"
+                  description="Leaderboard will appear once users start borrowing items."
+                />
+              ) : (
+                <>
+                  {/* Podium — Top 3 */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    {podiumUsers.map((user, i) => (
+                      <PodiumCard
+                        key={user.user_id}
                         user={user}
                         rank={user.rank}
                         index={i}
                       />
-                    ))
+                    ))}
+                  </div>
+
+                  {/* Ranked list 4–10 */}
+                  {rankedUsers.length > 0 && (
+                    <div className="card p-0 overflow-hidden">
+                      <div className="px-5 py-4 border-b border-gray-100">
+                        <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
+                          Rankings 4–{Math.min(10, leaderboardData.length)}
+                        </h3>
+                      </div>
+                      <div className="divide-y divide-gray-50">
+                        {rankedUsers.map((user, i) => (
+                          <RankedListItem
+                            key={user.user_id}
+                            user={user}
+                            rank={user.rank}
+                            index={i}
+                          />
+                        ))}
+                      </div>
+                    </div>
                   )}
-                </div>
-              </div>
+                </>
+              )}
             </motion.div>
           )}
 
-          {/* Department Rankings Tab */}
+          {/* Department Rankings */}
           {activeTab === "department" && (
             <motion.div
               key="department"
@@ -634,23 +531,22 @@ export default function Leaderboard() {
               <div className="flex items-center gap-2 mb-2">
                 <BarChart3 className="h-5 w-5 text-primary-600" />
                 <h3 className="text-lg font-semibold text-gray-900">
-                  Department Rankings by Points
+                  Department Rankings by Total Borrows
                 </h3>
               </div>
               {departmentRankings.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <BarChart3 className="h-10 w-10 text-gray-300 mb-3" />
-                  <p className="text-sm text-gray-500">
-                    No department data available
-                  </p>
-                </div>
+                <EmptyState
+                  icon={BarChart3}
+                  title="No Department Data"
+                  description="Rankings will appear once users from different departments borrow items."
+                />
               ) : (
                 <div className="space-y-5">
                   {departmentRankings.map((dept, i) => (
                     <DepartmentBar
-                      key={dept.name}
+                      key={dept.department}
                       dept={dept}
-                      maxPoints={maxDeptPoints}
+                      maxBorrows={maxDeptBorrows}
                       index={i}
                     />
                   ))}
@@ -659,7 +555,7 @@ export default function Leaderboard() {
             </motion.div>
           )}
 
-          {/* Badge Showcase Tab */}
+          {/* Badge Showcase */}
           {activeTab === "badges" && (
             <motion.div
               key="badges"
@@ -670,12 +566,9 @@ export default function Leaderboard() {
             >
               <div className="flex items-center gap-2">
                 <Award className="h-5 w-5 text-primary-600" />
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Badge Showcase
-                </h3>
+                <h3 className="text-lg font-semibold text-gray-900">Badge Showcase</h3>
                 <span className="text-sm text-gray-400 ml-2">
-                  ({earnedBadgeIds.size}/{ALL_BADGES.length} earned by
-                  community)
+                  ({earnedBadgeIds.size}/{ALL_BADGES.length} earned by community)
                 </span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">

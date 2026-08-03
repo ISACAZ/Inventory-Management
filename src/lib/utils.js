@@ -6,25 +6,33 @@ export function cn(...inputs) {
 }
 
 export function formatDate(date) {
+  if (!date) return '—'
+  const d = new Date(date)
+  if (isNaN(d.getTime())) return '—'
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-  }).format(new Date(date))
+  }).format(d)
 }
 
 export function formatDateTime(date) {
+  if (!date) return '—'
+  const d = new Date(date)
+  if (isNaN(d.getTime())) return '—'
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(new Date(date))
+  }).format(d)
 }
 
 export function formatRelative(date) {
+  if (!date) return '—'
   const now = new Date()
   const then = new Date(date)
+  if (isNaN(then.getTime())) return '—'
   const diff = now - then
   const minutes = Math.floor(diff / 60000)
   const hours = Math.floor(diff / 3600000)

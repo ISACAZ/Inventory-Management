@@ -14,7 +14,12 @@ def borrow_item(db: Session, user: User, body: BorrowRequest) -> BorrowRecord:
 
     Returns 409 Conflict when the requested quantity exceeds stock on hand.
     """
-    item = db.query(Item).filter(Item.id == body.item_id, Item.is_active.is_(True)).first()
+    item = (
+        db.query(Item)
+        .filter(Item.id == body.item_id, Item.is_active.is_(True))
+        .with_for_update()
+        .first()
+    )
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
 
@@ -30,6 +35,7 @@ def borrow_item(db: Session, user: User, body: BorrowRequest) -> BorrowRecord:
         item_id=item.id,
         quantity=body.quantity,
         status=BorrowStatus.borrowed,
+        due_date=body.due_date,
         note=body.note,
     )
     db.add(record)

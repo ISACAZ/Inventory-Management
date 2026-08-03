@@ -103,8 +103,11 @@ def create_user(db: Session, body: CreateUser) -> User:
     return user
 
 
-def list_users(db: Session, skip: int = 0, limit: int = 100) -> list[User]:
-    return db.query(User).offset(skip).limit(limit).all()
+def list_users(db: Session, skip: int = 0, limit: int = 100, include_inactive: bool = False) -> list[User]:
+    query = db.query(User)
+    if not include_inactive:
+        query = query.filter(User.is_active.is_(True))
+    return query.offset(skip).limit(limit).all()
 
 
 def get_user(db: Session, user_id: int) -> User:

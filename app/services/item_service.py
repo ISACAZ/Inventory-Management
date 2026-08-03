@@ -13,11 +13,14 @@ def list_items(
     limit: int = 100,
     category: Optional[str] = None,
     location_id: Optional[int] = None,
+    q: Optional[str] = None,
     include_inactive: bool = False,
 ) -> list[Item]:
     query = db.query(Item)
     if not include_inactive:
         query = query.filter(Item.is_active.is_(True))
+    if q:
+        query = query.filter(Item.name.ilike(f"%{q}%"))
     if category:
         query = query.filter(Item.category == category)
     if location_id is not None:

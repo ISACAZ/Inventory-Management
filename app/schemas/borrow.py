@@ -12,6 +12,7 @@ class BorrowStatusEnum(str, Enum):
 class BorrowRequest(BaseModel):
     item_id: int
     quantity: int = Field(default=1, ge=1)
+    due_date: Optional[datetime] = None
     note: Optional[str] = Field(default=None, max_length=500)
 
 
@@ -27,6 +28,7 @@ class BorrowOut(BaseModel):
     quantity: int
     status: BorrowStatusEnum
     borrowed_at: datetime
+    due_date: Optional[datetime] = None
     returned_at: Optional[datetime] = None
     note: Optional[str] = None
 

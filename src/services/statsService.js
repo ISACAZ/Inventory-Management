@@ -16,4 +16,12 @@ export const statsService = {
   getLowStock() {
     return apiClient.get('/stats/low-stock')
   },
+
+  getLeaderboard(limit = 10) {
+    return apiClient.get(`/stats/leaderboard?limit=${limit}`)
+  },
+
+  getRecommendations(limit = 12) {
+    return apiClient.get(`/stats/recommendations?limit=${limit}`)
+  },
 }

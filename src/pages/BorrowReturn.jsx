@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -24,7 +25,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Info,
-  ShieldAlert,
 } from "lucide-react";
 import PageTransition from "../components/PageTransition";
 import {
@@ -40,6 +40,7 @@ import { useAuth } from "../hooks/useAuth";
 import { toast } from "sonner";
 import { borrowService } from "../services/borrowService";
 import { itemService } from "../services/itemService";
+import { Skeleton, EmptyState, ErrorState, ConfirmDialog, TableSkeleton } from "../components/ui";
 
 /* --- TABS --- */
 const TABS = [
@@ -52,109 +53,8 @@ const TABS = [
 /* --- CONSTANTS --- */
 const CONDITIONS = ["excellent", "good", "fair", "poor", "damaged"];
 
-/* --- SKELETONS --- */
-function Skeleton({ className }) {
-  return <div className={cn("skeleton", className)} />;
-}
-
-function TableSkeleton({ rows = 5 }) {
-  return (
-    <div className="space-y-3">
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex items-center gap-4 p-4">
-          <Skeleton className="h-10 w-10 rounded-lg" />
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-4 w-48" />
-            <Skeleton className="h-3 w-32" />
-          </div>
-          <Skeleton className="h-6 w-20 rounded-full" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* --- COMPONENTS --- */
-function EmptyState({ icon: Icon, title, description }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-50 mb-4">
-        <Icon className="h-8 w-8 text-gray-300" />
-      </div>
-      <h3 className="text-base font-semibold text-gray-700">{title}</h3>
-      <p className="mt-1 text-sm text-gray-400 max-w-xs">{description}</p>
-    </div>
-  );
-}
-
-function ErrorState({ message, onRetry }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 mb-4">
-        <ShieldAlert className="h-8 w-8 text-red-400" />
-      </div>
-      <h3 className="text-base font-semibold text-gray-700">
-        Something went wrong
-      </h3>
-      <p className="mt-1 text-sm text-gray-400 max-w-xs">
-        {message || "An unexpected error occurred."}
-      </p>
-      {onRetry && (
-        <button onClick={onRetry} className="btn btn-outline mt-4">
-          Try Again
-        </button>
-      )}
-    </div>
-  );
-}
-
-function ConfirmDialog({
-  open,
-  title,
-  message,
-  onConfirm,
-  onCancel,
-  confirmLabel = "Confirm",
-  variant = "primary",
-}) {
-  if (!open) return null;
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-    >
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 10 }}
-        transition={{ duration: 0.2 }}
-        className="card max-w-md w-full p-6"
-      >
-        <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-        <p className="mt-2 text-sm text-gray-600">{message}</p>
-        <div className="mt-6 flex items-center justify-end gap-3">
-          <button onClick={onCancel} className="btn btn-outline min-h-[44px]">
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            className={cn(
-              "btn min-h-[44px]",
-              variant === "danger" ? "btn-danger" : "btn-primary",
-            )}
-          >
-            {confirmLabel}
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-}
-
 /* --- BORROW TAB --- */
-function BorrowTab({ currentUser, items, borrowMutation }) {
+function BorrowTab({ currentUser, items, borrowMutation, preselectedItem }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [showResults, setShowResults] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -165,6 +65,19 @@ function BorrowTab({ currentUser, items, borrowMutation }) {
   const [expectedReturn, setExpectedReturn] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
   const searchRef = useRef(null);
+  const hasAutoSelected = useRef(false);
+
+  // Auto-select item passed via navigation state.
+  useEffect(() => {
+    if (preselectedItem && !hasAutoSelected.current && items.length > 0) {
+      const match = items.find((i) => i.id === preselectedItem.id);
+      if (match) {
+        setSelectedItem(match);
+        setSearchQuery(match.name);
+        hasAutoSelected.current = true;
+      }
+    }
+  }, [preselectedItem, items]);
 
   const availableItems = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -205,7 +118,14 @@ function BorrowTab({ currentUser, items, borrowMutation }) {
 
   function handleConfirmBorrow() {
     borrowMutation.mutate(
-      { item_id: selectedItem.id, quantity, note: purpose },
+      {
+        item_id: selectedItem.id,
+        quantity,
+        note: [purpose, course && `Course: ${course}`, professor && `Professor: ${professor}`]
+          .filter(Boolean)
+          .join(" | ") || null,
+        due_date: expectedReturn ? new Date(expectedReturn).toISOString() : null,
+      },
       {
         onSettled: () => {
           setShowConfirm(false);
@@ -275,9 +195,9 @@ function BorrowTab({ currentUser, items, borrowMutation }) {
                     className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors min-h-[44px] focus-visible:outline-2 focus-visible:outline-offset-[-2px]"
                   >
                     <img
-                      src={item.image}
+                      src={item.image || `https://picsum.photos/seed/${item.id}/80/80`}
                       alt={item.name}
-                      className="h-10 w-10 rounded-lg object-cover flex-shrink-0"
+                      className="h-10 w-10 rounded-lg object-cover flex-shrink-0 bg-gray-100"
                     />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">
@@ -288,7 +208,7 @@ function BorrowTab({ currentUser, items, borrowMutation }) {
                       </p>
                     </div>
                     <span className={cn("badge", getStatusColor(item.status))}>
-                      {item.status}
+                      {item.available_quantity > 0 ? "Available" : "Out of stock"}
                     </span>
                   </button>
                 ))
@@ -309,9 +229,9 @@ function BorrowTab({ currentUser, items, borrowMutation }) {
           >
             <div className="flex items-start gap-4">
               <img
-                src={selectedItem.image}
+                src={selectedItem.image || `https://picsum.photos/seed/${selectedItem.id}/160/160`}
                 alt={selectedItem.name}
-                className="h-20 w-20 rounded-xl object-cover flex-shrink-0"
+                className="h-20 w-20 rounded-xl object-cover flex-shrink-0 bg-gray-100"
               />
               <div className="flex-1 min-w-0">
                 <h3 className="text-base font-semibold text-gray-900">
@@ -325,14 +245,6 @@ function BorrowTab({ currentUser, items, borrowMutation }) {
                     className={cn("badge", getStatusColor(selectedItem.status))}
                   >
                     {selectedItem.available_quantity} available
-                  </span>
-                  <span
-                    className={cn(
-                      "badge",
-                      getConditionColor(selectedItem.condition),
-                    )}
-                  >
-                    {selectedItem.condition}
                   </span>
                 </div>
                 <p className="mt-2 text-sm text-gray-500 line-clamp-2">
@@ -618,9 +530,9 @@ function ReturnTab({ currentUser, items, transactions, returnMutation }) {
                       className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors min-h-[44px]"
                     >
                       <img
-                        src={item?.image || ""}
+                        src={item?.image || `https://picsum.photos/seed/${item?.id || txn.item_id}/80/80`}
                         alt={item?.name || ""}
-                        className="h-10 w-10 rounded-lg object-cover flex-shrink-0"
+                        className="h-10 w-10 rounded-lg object-cover flex-shrink-0 bg-gray-100"
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 truncate">
@@ -651,9 +563,9 @@ function ReturnTab({ currentUser, items, transactions, returnMutation }) {
           >
             <div className="flex items-start gap-4">
               <img
-                src={selectedItem.image}
+                src={selectedItem.image || `https://picsum.photos/seed/${selectedItem.id}/160/160`}
                 alt={selectedItem.name}
-                className="h-20 w-20 rounded-xl object-cover flex-shrink-0"
+                className="h-20 w-20 rounded-xl object-cover flex-shrink-0 bg-gray-100"
               />
               <div className="flex-1 min-w-0">
                 <h3 className="text-base font-semibold text-gray-900">
@@ -662,14 +574,6 @@ function ReturnTab({ currentUser, items, transactions, returnMutation }) {
                 <div className="flex flex-wrap items-center gap-2 mt-1.5">
                   <span className="badge badge-neutral">
                     {selectedItem.category}
-                  </span>
-                  <span
-                    className={cn(
-                      "badge",
-                      getConditionColor(selectedItem.condition),
-                    )}
-                  >
-                    {selectedItem.condition}
                   </span>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
@@ -681,7 +585,11 @@ function ReturnTab({ currentUser, items, transactions, returnMutation }) {
                   </div>
                   <div>
                     <span className="text-gray-400">Due Date</span>
-                    <p className="text-gray-700">&mdash;</p>
+                    <p className="text-gray-700">
+                      {selectedTransaction.due_date
+                        ? formatDate(selectedTransaction.due_date)
+                        : "—"}
+                    </p>
                   </div>
                   <div>
                     <span className="text-gray-400">Quantity</span>
@@ -825,9 +733,9 @@ function MyItemsTab({ currentUser, items, transactions }) {
       <div className="divide-y divide-gray-50">
         {myItems.map((txn) => {
           const item = findItem(items, txn.item_id);
-          const isOverdue =
-            new Date(txn.borrowed_at) <
-            new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+          const isOverdue = txn.due_date
+            ? new Date(txn.due_date) < new Date()
+            : false;
           return (
             <motion.div
               key={txn.id}
@@ -841,9 +749,9 @@ function MyItemsTab({ currentUser, items, transactions }) {
               {/* Item info */}
               <div className="sm:col-span-4 flex items-center gap-3">
                 <img
-                  src={item?.image || ""}
+                  src={item?.image || `https://picsum.photos/seed/${item?.id || txn.item_id}/80/80`}
                   alt={item?.name || ""}
-                  className="h-10 w-10 rounded-lg object-cover flex-shrink-0"
+                  className="h-10 w-10 rounded-lg object-cover flex-shrink-0 bg-gray-100"
                 />
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">
@@ -865,7 +773,7 @@ function MyItemsTab({ currentUser, items, transactions }) {
                   Due:{" "}
                 </span>
                 <span className={cn(isOverdue && "text-red-600 font-medium")}>
-                  &mdash;
+                  {txn.due_date ? formatDate(txn.due_date) : "—"}
                 </span>
               </div>
 
@@ -897,13 +805,14 @@ function MyItemsTab({ currentUser, items, transactions }) {
 /* --- OVERDUE TAB --- */
 function OverdueTab({ currentUser, items, transactions }) {
   const overdueItems = useMemo(() => {
-    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
     return transactions
       .filter(
         (t) =>
-          t.status === "borrowed" && new Date(t.borrowed_at) < fourteenDaysAgo,
+          t.status === "borrowed" &&
+          t.due_date &&
+          new Date(t.due_date) < new Date(),
       )
-      .sort((a, b) => new Date(a.borrowed_at) - new Date(b.borrowed_at));
+      .sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
   }, [transactions]);
 
   if (overdueItems.length === 0) {
@@ -934,13 +843,10 @@ function OverdueTab({ currentUser, items, transactions }) {
 
       {overdueItems.map((txn) => {
         const item = findItem(items, txn.item_id);
-        const daysOverdue = Math.max(
-          1,
-          Math.ceil(
-            (Date.now() - new Date(txn.borrowed_at).getTime()) /
-              (1000 * 60 * 60 * 24),
-          ) - 14,
-        );
+        const dueDate = txn.due_date ? new Date(txn.due_date) : null;
+        const daysOverdue = dueDate
+          ? Math.max(1, Math.ceil((Date.now() - dueDate.getTime()) / (1000 * 60 * 60 * 24)))
+          : 1;
         return (
           <motion.div
             key={txn.id}
@@ -951,9 +857,9 @@ function OverdueTab({ currentUser, items, transactions }) {
             <div className="flex items-start gap-4">
               <div className="relative">
                 <img
-                  src={item?.image || ""}
+                  src={item?.image || `https://picsum.photos/seed/${item?.id || txn.item_id}/80/80`}
                   alt={item?.name || ""}
-                  className="h-16 w-16 rounded-xl object-cover"
+                  className="h-16 w-16 rounded-xl object-cover bg-gray-100"
                 />
                 <span className="absolute -top-1.5 -right-1.5 h-5 w-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                   !
@@ -981,12 +887,7 @@ function OverdueTab({ currentUser, items, transactions }) {
                   <div>
                     <span className="text-gray-400">Was Due</span>
                     <p className="text-red-600 font-medium">
-                      {formatDate(
-                        new Date(
-                          new Date(txn.borrowed_at).getTime() +
-                            14 * 24 * 60 * 60 * 1000,
-                        ),
-                      )}
+                      {dueDate ? formatDate(dueDate) : "—"}
                     </p>
                   </div>
                   <div className="col-span-2">
@@ -1008,6 +909,8 @@ export default function BorrowReturn() {
   const [activeTab, setActiveTab] = useState("borrow");
   const { currentUser } = useAuth();
   const queryClient = useQueryClient();
+  const location = useLocation();
+  const preselectedItem = location.state?.selectedItem || null;
 
   const {
     data: rawItems = [],
@@ -1156,6 +1059,7 @@ export default function BorrowReturn() {
             transactions={myTransactions}
             borrowMutation={borrowMutation}
             returnMutation={returnMutation}
+            preselectedItem={preselectedItem}
           />
         )}
 

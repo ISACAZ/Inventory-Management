@@ -459,7 +459,7 @@ export default function Analytics() {
     isLoading: smLoading,
     error: smError,
   } = useQuery({
-    queryKey: ["stats-stockmovement", 365],
+    queryKey: ["stats-stockmovement"],
     queryFn: () => statsService.getStockMovement(365),
   });
 
@@ -477,7 +477,7 @@ export default function Analytics() {
     isLoading: ilLoading,
     error: ilError,
   } = useQuery({
-    queryKey: ["items-list"],
+    queryKey: ["items"],
     queryFn: () => itemService.listItems({ limit: 200 }),
   });
 

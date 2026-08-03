@@ -28,12 +28,9 @@ import {
   getConditionColor,
   truncate,
 } from "../lib/utils";
-import { items } from "../data/mockData";
-
-/* --- SKELETONS --- */
-function Skeleton({ className }) {
-  return <div className={cn("skeleton", className)} />;
-}
+import { useQuery } from "@tanstack/react-query";
+import { itemService } from "../services/itemService";
+import { EmptyState, Skeleton } from "../components/ui";
 
 function CardSkeleton() {
   return (
@@ -46,19 +43,6 @@ function CardSkeleton() {
         </div>
       </div>
       <Skeleton className="h-8 w-full rounded-lg" />
-    </div>
-  );
-}
-
-/* --- COMPONENTS --- */
-function EmptyState({ icon: Icon, title, description }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-50 mb-4">
-        <Icon className="h-8 w-8 text-gray-300" />
-      </div>
-      <h3 className="text-base font-semibold text-gray-700">{title}</h3>
-      <p className="mt-1 text-sm text-gray-400 max-w-xs">{description}</p>
     </div>
   );
 }
@@ -279,6 +263,11 @@ export default function QrScanner() {
   const [scannedItem, setScannedItem] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
   const [recentScans, setRecentScans] = useState([]);
+
+  const { data: apiItems = [], isLoading: itemsLoading } = useQuery({
+    queryKey: ["items"],
+    queryFn: () => itemService.listItems({ limit: 200 }),
+  });
   const scanTimerRef = useRef(null);
 
   const startScanning = useCallback(() => {
@@ -315,19 +304,19 @@ export default function QrScanner() {
     startScanning();
     setLoading(true);
     setTimeout(() => {
-      const randomItem = items[Math.floor(Math.random() * items.length)];
+      const randomItem = apiItems[Math.floor(Math.random() * apiItems.length)];
       setLoading(false);
       handleScannedItem(randomItem);
     }, 1500);
-  }, [startScanning, handleScannedItem]);
+  }, [startScanning, handleScannedItem, apiItems]);
 
   const handleManualScan = useCallback(() => {
     if (!manualCode.trim()) return;
     setLoading(true);
     setTimeout(() => {
       const code = manualCode.trim();
-      const found = items.find(
-        (i) => i.id === code || i.qrCode === code || i.serialNumber === code,
+      const found = apiItems.find(
+        (i) => String(i.id) === code || `QR-${i.id}` === code,
       );
       setLoading(false);
       if (found) {
