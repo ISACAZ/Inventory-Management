@@ -150,7 +150,7 @@
         border-color: var(--color-border);
     }
 
-    body {g
+    body {
         background-color: var(--color-surface);
         color: var(--color-text-primary);
         font-feature-settings: "cv02", "cv03", "cv04", "cv11";
