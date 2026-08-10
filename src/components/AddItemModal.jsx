@@ -16,6 +16,7 @@ export default function AddItemModal({ open, onClose }) {
   const [totalQuantity, setTotalQuantity] = useState(1);
   const [lowStockThreshold, setLowStockThreshold] = useState(1);
   const [locationId, setLocationId] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
 
   const { data: locations = [] } = useQuery({
     queryKey: ["locations"],
@@ -41,6 +42,7 @@ export default function AddItemModal({ open, onClose }) {
     setTotalQuantity(1);
     setLowStockThreshold(1);
     setLocationId("");
+    setImageUrl("");
   }
 
   function handleSubmit(e) {
@@ -53,6 +55,7 @@ export default function AddItemModal({ open, onClose }) {
       total_quantity: totalQuantity,
       low_stock_threshold: lowStockThreshold,
       location_id: locationId ? parseInt(locationId) : null,
+      image_url: imageUrl.trim() || null,
     });
   }
 
@@ -141,6 +144,17 @@ export default function AddItemModal({ open, onClose }) {
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="label">Image URL</label>
+              <input
+                type="url"
+                className="input"
+                placeholder="https://example.com/image.jpg"
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">

@@ -29,6 +29,8 @@ class Item(Base):
 
     location_id = Column(Integer, ForeignKey("locations.id"), nullable=True)
 
+    image_url = Column(String(500), nullable=True)
+
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, nullable=False, default=_utcnow)
     updated_at = Column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)

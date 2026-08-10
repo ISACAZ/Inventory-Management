@@ -92,7 +92,7 @@ export default function Inventory() {
         ...item,
         quantity: item.total_quantity,
         availableQuantity: item.available_quantity,
-        image: `https://picsum.photos/seed/${item.id}/400/300`,
+        image: item.image_url || `https://picsum.photos/seed/${item.id}/400/300`,
         qrCode: `QR-${item.id}`,
         value: 0,
         borrowCount: 0,

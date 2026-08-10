@@ -233,7 +233,7 @@ export default function Dashboard() {
         id: u.item_id,
         name: u.name,
         borrowCount: u.borrow_count,
-        image: null,
+        image: u.image_url || null,
         status: "available",
       })),
     [itemUsage],
@@ -838,7 +838,7 @@ export default function Dashboard() {
                     <img
                       src={
                         item.image ||
-                        `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&size=176&background=f1f5f9&color=7C8D7D`
+                        `https://picsum.photos/seed/${item.id}/400/300`
                       }
                       alt={item.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"

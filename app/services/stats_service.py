@@ -42,11 +42,12 @@ def item_usage(db: Session, limit: int = 10) -> list[ItemUsageOut]:
         db.query(
             Item.id,
             Item.name,
+            Item.image_url,
             func.count(BorrowRecord.id).label("borrow_count"),
             func.coalesce(func.sum(BorrowRecord.quantity), 0).label("total_quantity_borrowed"),
         )
         .join(BorrowRecord, BorrowRecord.item_id == Item.id)
-        .group_by(Item.id, Item.name)
+        .group_by(Item.id, Item.name, Item.image_url)
         .order_by(func.count(BorrowRecord.id).desc())
         .limit(limit)
         .all()
@@ -57,6 +58,7 @@ def item_usage(db: Session, limit: int = 10) -> list[ItemUsageOut]:
             name=r.name,
             borrow_count=int(r.borrow_count),
             total_quantity_borrowed=int(r.total_quantity_borrowed),
+            image_url=r.image_url,
         )
         for r in rows
     ]

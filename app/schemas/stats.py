@@ -16,6 +16,7 @@ class ItemUsageOut(BaseModel):
     name: str
     borrow_count: int
     total_quantity_borrowed: int
+    image_url: str | None = None
 
 
 class StockMovementOut(BaseModel):

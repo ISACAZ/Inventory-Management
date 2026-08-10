@@ -940,7 +940,7 @@ export default function BorrowReturn() {
   const items = useMemo(() => {
     return rawItems.map((item) => ({
       ...item,
-      image: `https://picsum.photos/seed/${item.id}/400/300`,
+      image: item.image_url || `https://picsum.photos/seed/${item.id}/400/300`,
       status: item.is_active
         ? item.available_quantity > 0
           ? "available"

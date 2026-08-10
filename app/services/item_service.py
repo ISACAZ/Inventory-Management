@@ -55,6 +55,7 @@ def create_item(db: Session, body: ItemCreate) -> Item:
         available_quantity=body.total_quantity,
         low_stock_threshold=body.low_stock_threshold,
         location_id=body.location_id,
+        image_url=body.image_url,
     )
     db.add(item)
     db.commit()
