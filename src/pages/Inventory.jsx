@@ -31,6 +31,7 @@ import {
   getStatusColor,
   getConditionColor,
   truncate,
+  getPlaceholderImage,
 } from "../lib/utils";
 import { itemService } from "../services/itemService";
 import { locationService } from "../services/locationService";
@@ -92,7 +93,7 @@ export default function Inventory() {
         ...item,
         quantity: item.total_quantity,
         availableQuantity: item.available_quantity,
-        image: item.image_url || `https://picsum.photos/seed/${item.id}/400/300`,
+        image: item.image_url || getPlaceholderImage(item),
         qrCode: `QR-${item.id}`,
         value: 0,
         borrowCount: 0,

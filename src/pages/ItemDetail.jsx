@@ -36,6 +36,7 @@ import {
   getStatusColor,
   getConditionColor,
   truncate,
+  getPlaceholderImage,
 } from "../lib/utils";
 import { itemService } from "../services/itemService";
 import { locationService } from "../services/locationService";
@@ -74,7 +75,7 @@ function enrichItem(apiItem) {
     ...apiItem,
     quantity: apiItem.total_quantity,
     availableQuantity: apiItem.available_quantity,
-    image: apiItem.image_url || `https://picsum.photos/seed/${apiItem.id}/400/300`,
+    image: apiItem.image_url || getPlaceholderImage(apiItem),
     images: apiItem.image_url ? [apiItem.image_url] : null,
     qrCode: `QR-${apiItem.id}`,
     value: 0,

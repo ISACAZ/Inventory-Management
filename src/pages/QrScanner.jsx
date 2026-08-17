@@ -27,6 +27,7 @@ import {
   getStatusColor,
   getConditionColor,
   truncate,
+  getPlaceholderImage,
 } from "../lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { itemService } from "../services/itemService";
@@ -94,7 +95,7 @@ function ScannedItemCard({ item, onBorrow, onReturn, onDismiss }) {
         {/* Item image and basic info */}
         <div className="flex items-start gap-4 mt-2">
           <img
-            src={item.image_url || `https://picsum.photos/seed/${item.id}/160/160`}
+            src={item.image_url || getPlaceholderImage(item)}
             alt={item.name}
             className="h-20 w-20 rounded-xl object-cover flex-shrink-0"
           />
@@ -232,7 +233,7 @@ function RecentScans({ scans, onSelect, onClear }) {
             className="w-full flex items-center gap-3 p-3 rounded-xl bg-white border border-gray-100 hover:border-primary-200 hover:bg-primary-50/20 transition-all text-left min-h-[44px] focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             <img
-              src={scan.item.image_url || `https://picsum.photos/seed/${scan.item.id}/80/80`}
+              src={scan.item.image_url || getPlaceholderImage(scan.item)}
               alt={scan.item.name}
               className="h-10 w-10 rounded-lg object-cover flex-shrink-0"
             />

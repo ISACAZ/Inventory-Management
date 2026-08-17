@@ -3,6 +3,8 @@
  * Department of Electrical and Computer Engineering
  * Complete mock data — all named exports, 150 items, 25 users, 50 txns, etc.
  */
+import { getPlaceholderImage } from "../lib/utils";
+
 const dA = (n) => {
   const d = new Date();
   d.setDate(d.getDate() - n);
@@ -220,7 +222,7 @@ const I = (
   purchaseDate: pd,
   lastMaintenance: lm,
   nextMaintenance: nmt,
-  image: `https://picsum.photos/seed/${s}/400/300`,
+  image: getPlaceholderImage({ name: nm, category: cat }),
   specs: sp,
   qrCode: `QR-${id}`,
   description: ds,
@@ -250,7 +252,7 @@ const M = (r) => {
     purchaseDate: r[13],
     lastMaintenance: r[14],
     nextMaintenance: r[15],
-    image: `https://picsum.photos/seed/${r[16]}/400/300`,
+    image: getPlaceholderImage({ name: r[1], category: r[2] }),
     specs: sp,
     qrCode: `QR-${r[0]}`,
     description: r[r.length - 4],

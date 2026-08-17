@@ -39,7 +39,13 @@ import {
 } from "recharts";
 import { useQuery } from "@tanstack/react-query";
 import PageTransition from "../components/PageTransition";
-import { cn, formatDate, formatRelative, getStatusColor } from "../lib/utils";
+import {
+  cn,
+  formatDate,
+  formatRelative,
+  getStatusColor,
+  getPlaceholderImage,
+} from "../lib/utils";
 import { statsService } from "../services/statsService";
 import { borrowService } from "../services/borrowService";
 import { useAuth } from "../hooks/useAuth";
@@ -836,10 +842,7 @@ export default function Dashboard() {
                 >
                   <div className="aspect-[4/3] rounded-lg overflow-hidden bg-gray-100 mb-2">
                     <img
-                      src={
-                        item.image ||
-                        `https://picsum.photos/seed/${item.id}/400/300`
-                      }
+                      src={item.image || getPlaceholderImage(item)}
                       alt={item.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       loading="lazy"

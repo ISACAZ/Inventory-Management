@@ -27,6 +27,7 @@ import {
   getStatusColor,
   getConditionColor,
   truncate,
+  getPlaceholderImage,
 } from "../lib/utils";
 import { locationService } from "../services/locationService";
 import { useAuth } from "../hooks/useAuth";
@@ -131,7 +132,7 @@ function LocationDetail({ location, items }) {
   const enrichedItems = useMemo(() => {
     return items.map((item) => ({
       ...item,
-      image: item.image_url || `https://picsum.photos/seed/${item.id}/400/300`,
+      image: item.image_url || getPlaceholderImage(item),
       status: item.is_active
         ? item.available_quantity > 0
           ? "available"

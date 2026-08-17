@@ -35,6 +35,7 @@ import {
   getStatusColor,
   getConditionColor,
   truncate,
+  getPlaceholderImage,
 } from "../lib/utils";
 import { useAuth } from "../hooks/useAuth";
 import { toast } from "sonner";
@@ -195,7 +196,7 @@ function BorrowTab({ currentUser, items, borrowMutation, preselectedItem }) {
                     className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors min-h-[44px] focus-visible:outline-2 focus-visible:outline-offset-[-2px]"
                   >
                     <img
-                      src={item.image || `https://picsum.photos/seed/${item.id}/80/80`}
+                      src={item.image || getPlaceholderImage(item)}
                       alt={item.name}
                       className="h-10 w-10 rounded-lg object-cover flex-shrink-0 bg-gray-100"
                     />
@@ -229,7 +230,7 @@ function BorrowTab({ currentUser, items, borrowMutation, preselectedItem }) {
           >
             <div className="flex items-start gap-4">
               <img
-                src={selectedItem.image || `https://picsum.photos/seed/${selectedItem.id}/160/160`}
+                src={selectedItem.image || getPlaceholderImage(selectedItem)}
                 alt={selectedItem.name}
                 className="h-20 w-20 rounded-xl object-cover flex-shrink-0 bg-gray-100"
               />
@@ -530,7 +531,7 @@ function ReturnTab({ currentUser, items, transactions, returnMutation }) {
                       className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors min-h-[44px]"
                     >
                       <img
-                        src={item?.image || `https://picsum.photos/seed/${item?.id || txn.item_id}/80/80`}
+                        src={item?.image || getPlaceholderImage(item)}
                         alt={item?.name || ""}
                         className="h-10 w-10 rounded-lg object-cover flex-shrink-0 bg-gray-100"
                       />
@@ -563,7 +564,7 @@ function ReturnTab({ currentUser, items, transactions, returnMutation }) {
           >
             <div className="flex items-start gap-4">
               <img
-                src={selectedItem.image || `https://picsum.photos/seed/${selectedItem.id}/160/160`}
+                src={selectedItem.image || getPlaceholderImage(selectedItem)}
                 alt={selectedItem.name}
                 className="h-20 w-20 rounded-xl object-cover flex-shrink-0 bg-gray-100"
               />
@@ -749,7 +750,7 @@ function MyItemsTab({ currentUser, items, transactions }) {
               {/* Item info */}
               <div className="sm:col-span-4 flex items-center gap-3">
                 <img
-                  src={item?.image || `https://picsum.photos/seed/${item?.id || txn.item_id}/80/80`}
+                  src={item?.image || getPlaceholderImage(item)}
                   alt={item?.name || ""}
                   className="h-10 w-10 rounded-lg object-cover flex-shrink-0 bg-gray-100"
                 />
@@ -857,7 +858,7 @@ function OverdueTab({ currentUser, items, transactions }) {
             <div className="flex items-start gap-4">
               <div className="relative">
                 <img
-                  src={item?.image || `https://picsum.photos/seed/${item?.id || txn.item_id}/80/80`}
+                  src={item?.image || getPlaceholderImage(item)}
                   alt={item?.name || ""}
                   className="h-16 w-16 rounded-xl object-cover bg-gray-100"
                 />
@@ -940,7 +941,7 @@ export default function BorrowReturn() {
   const items = useMemo(() => {
     return rawItems.map((item) => ({
       ...item,
-      image: item.image_url || `https://picsum.photos/seed/${item.id}/400/300`,
+      image: item.image_url || getPlaceholderImage(item),
       status: item.is_active
         ? item.available_quantity > 0
           ? "available"
