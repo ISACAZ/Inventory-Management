@@ -920,7 +920,7 @@ export default function BorrowReturn() {
     error: itemsErr,
   } = useQuery({
     queryKey: ["items"],
-    queryFn: () => itemService.listItems({ limit: 200 }),
+    queryFn: () => itemService.listItems({ limit: 1000 }),
   });
 
   const {

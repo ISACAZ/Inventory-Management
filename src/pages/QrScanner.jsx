@@ -267,7 +267,7 @@ export default function QrScanner() {
 
   const { data: apiItems = [], isLoading: itemsLoading } = useQuery({
     queryKey: ["items"],
-    queryFn: () => itemService.listItems({ limit: 200 }),
+    queryFn: () => itemService.listItems({ limit: 1000 }),
   });
   const scanTimerRef = useRef(null);
 

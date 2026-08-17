@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
@@ -49,10 +50,15 @@ import {
   truncate,
 } from "../lib/utils";
 import { statsService } from "../services/statsService";
-import { itemService } from "../services/itemService";
 import { userService } from "../services/userService";
+import AddItemModal from "../components/AddItemModal";
 
 // ---- Constants ----
+
+// Fetches "all" users for client-side search/filter — must stay comfortably
+// above the real user count or accounts silently disappear from the table.
+const FETCH_ALL_LIMIT = 500;
+
 const ADMIN_TABS = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "users", label: "Users", icon: UsersIcon },
@@ -337,6 +343,7 @@ function QRPattern({ code }) {
 // ---- Main Component ----
 export default function Admin() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("overview");
   const [auditCategory, setAuditCategory] = useState("all");
   const [auditSearch, setAuditSearch] = useState("");
@@ -347,6 +354,7 @@ export default function Admin() {
   const [userStatusFilter, setUserStatusFilter] = useState("all");
   const [editingUser, setEditingUser] = useState(null);
   const [showAddUser, setShowAddUser] = useState(false);
+  const [showAddItem, setShowAddItem] = useState(false);
   const {
     data: summary,
     isLoading: summaryLoading,
@@ -356,18 +364,6 @@ export default function Admin() {
     queryFn: statsService.getSummary,
   });
 
-  const {
-    data: itemsList,
-    isLoading: itemsLoading,
-    error: itemsError,
-  } = useQuery({
-    queryKey: ["items-list"],
-    queryFn: () => itemService.listItems({ limit: 200 }),
-  });
-
-  const isLoading = summaryLoading || itemsLoading;
-  const hasError = summaryError || itemsError;
-
   // Fetch real users from API
   const {
     data: apiUsers = [],
@@ -376,8 +372,16 @@ export default function Admin() {
     error: usersApiError,
   } = useQuery({
     queryKey: ["admin-users"],
-    queryFn: () => userService.listUsers({ limit: 200 }),
+    queryFn: () => userService.listUsers({ limit: FETCH_ALL_LIMIT }),
   });
+
+  // NOTE: this used to also fetch the full item list into an `itemsList`
+  // variable that was never read anywhere — it just added an extra 200-item
+  // network request and gated page load/error state on a query whose result
+  // was thrown away. The "Total Items" stat below already comes from
+  // `summary.total_items` (a real backend aggregate), so it was removed.
+  const isLoading = summaryLoading || usersLoading;
+  const hasError = summaryError || usersError;
 
   // Mutations for user management
   const updateUserMutation = useMutation({
@@ -652,15 +656,13 @@ export default function Admin() {
                         key={action.id}
                         onClick={() => {
                           if (action.id === "add-item")
-                            toast.info("Add Item dialog opened");
+                            setShowAddItem(true);
                           else if (action.id === "add-user")
                             setShowAddUser(true);
                           else if (action.id === "scan-qr")
-                            toast.info("QR Scanner opened");
+                            navigate("/qr-scanner");
                           else if (action.id === "backup")
-                            toast.success("Backup initiated", {
-                              description: "Data backup will complete shortly",
-                            });
+                            toast.info("Backup export is not available yet");
                         }}
                         className={cn(
                           "flex flex-col items-center gap-2 p-4 rounded-xl border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all min-h-[44px] focus-visible:outline-2 focus-visible:outline-primary-500",
@@ -1166,6 +1168,7 @@ export default function Admin() {
                   <input
                     name="password"
                     type="password"
+                    minLength={6}
                     className="input"
                     placeholder="••••••••"
                     autoComplete="new-password"
@@ -1309,6 +1312,8 @@ export default function Admin() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <AddItemModal open={showAddItem} onClose={() => setShowAddItem(false)} />
     </PageTransition>
   );
 }

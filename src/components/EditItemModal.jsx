@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Package, Plus } from "lucide-react";
+import { X, Package, Save } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { itemService } from "../services/itemService";
@@ -8,7 +8,11 @@ import { locationService } from "../services/locationService";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "../lib/utils";
 
-export default function AddItemModal({ open, onClose }) {
+/**
+ * Edit an existing item — PATCH /items/{id}. Mirrors AddItemModal's layout
+ * but pre-fills from `item` and only sends fields that actually changed.
+ */
+export default function EditItemModal({ open, item, onClose }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -24,47 +28,59 @@ export default function AddItemModal({ open, onClose }) {
     enabled: open,
   });
 
-  const createMutation = useMutation({
-    mutationFn: itemService.createItem,
+  // Re-seed form fields whenever a new item is opened for editing.
+  useEffect(() => {
+    if (!item) return;
+    setName(item.name || "");
+    setDescription(item.description || "");
+    setCategory(item.category || "");
+    setTotalQuantity(item.total_quantity ?? 1);
+    setLowStockThreshold(item.low_stock_threshold ?? 1);
+    setLocationId(item.location_id ? String(item.location_id) : "");
+    setImageUrl(item.image_url || "");
+  }, [item]);
+
+  const updateMutation = useMutation({
+    mutationFn: (data) => itemService.updateItem(item.id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["items"] });
-      // Also refresh dashboard/admin stat cards (total item count, low-stock
-      // list, etc.) so a newly created item is reflected without a full page
-      // reload — this modal is reused from both Inventory and Admin.
       queryClient.invalidateQueries({ queryKey: ["stats-summary"] });
       queryClient.invalidateQueries({ queryKey: ["stats-lowstock"] });
-      toast.success("Item created successfully");
-      resetForm();
+      toast.success("Item updated successfully");
       onClose();
     },
-    onError: (err) => toast.error(err.message || "Failed to create item"),
+    onError: (err) => toast.error(err.message || "Failed to update item"),
   });
-
-  function resetForm() {
-    setName("");
-    setDescription("");
-    setCategory("");
-    setTotalQuantity(1);
-    setLowStockThreshold(1);
-    setLocationId("");
-    setImageUrl("");
-  }
 
   function handleSubmit(e) {
     e.preventDefault();
-    if (!name.trim()) return;
-    createMutation.mutate({
-      name: name.trim(),
-      description: description.trim() || null,
-      category: category.trim() || null,
-      total_quantity: totalQuantity,
-      low_stock_threshold: lowStockThreshold,
-      location_id: locationId ? parseInt(locationId) : null,
-      image_url: imageUrl.trim() || null,
-    });
+    if (!name.trim() || !item) return;
+
+    // Only send fields that changed from the original item — PATCH is
+    // partial-update, no need to resend everything untouched.
+    const data = {};
+    if (name.trim() !== item.name) data.name = name.trim();
+    const newDescription = description.trim() || null;
+    if (newDescription !== (item.description || null)) data.description = newDescription;
+    const newCategory = category.trim() || null;
+    if (newCategory !== (item.category || null)) data.category = newCategory;
+    if (totalQuantity !== item.total_quantity) data.total_quantity = totalQuantity;
+    if (lowStockThreshold !== item.low_stock_threshold) data.low_stock_threshold = lowStockThreshold;
+    const newLocationId = locationId ? parseInt(locationId) : null;
+    if (newLocationId !== (item.location_id || null)) data.location_id = newLocationId;
+    const newImageUrl = imageUrl.trim() || null;
+    if (newImageUrl !== (item.image_url || null)) data.image_url = newImageUrl;
+
+    if (Object.keys(data).length === 0) {
+      toast.info("No changes to save");
+      onClose();
+      return;
+    }
+
+    updateMutation.mutate(data);
   }
 
-  if (!open) return null;
+  if (!open || !item) return null;
 
   return (
     <AnimatePresence>
@@ -87,7 +103,7 @@ export default function AddItemModal({ open, onClose }) {
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
                 <Package className="h-5 w-5" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900">Add Item</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Edit Item</h3>
             </div>
             <button
               onClick={onClose}
@@ -174,6 +190,10 @@ export default function AddItemModal({ open, onClose }) {
                     setTotalQuantity(Math.max(0, parseInt(e.target.value) || 0))
                   }
                 />
+                <p className="text-xs text-gray-400">
+                  Currently {item.available_quantity} available on the shelf.
+                  Raising/lowering this shifts availability by the same amount.
+                </p>
               </div>
               <div className="space-y-1.5">
                 <label className="label">Low Stock Threshold</label>
@@ -201,15 +221,17 @@ export default function AddItemModal({ open, onClose }) {
               </button>
               <button
                 type="submit"
-                disabled={createMutation.isPending || !name.trim()}
-                className="btn btn-primary flex-1 min-h-[44px] flex items-center justify-center gap-2"
+                disabled={updateMutation.isPending || !name.trim()}
+                className={cn(
+                  "btn btn-primary flex-1 min-h-[44px] flex items-center justify-center gap-2",
+                )}
               >
-                {createMutation.isPending ? (
+                {updateMutation.isPending ? (
                   <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : (
-                  <Plus className="h-4 w-4" />
+                  <Save className="h-4 w-4" />
                 )}
-                Create Item
+                Save Changes
               </button>
             </div>
           </form>

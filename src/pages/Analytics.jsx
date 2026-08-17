@@ -478,7 +478,7 @@ export default function Analytics() {
     error: ilError,
   } = useQuery({
     queryKey: ["items"],
-    queryFn: () => itemService.listItems({ limit: 200 }),
+    queryFn: () => itemService.listItems({ limit: 1000 }),
   });
 
   const isLoading = smLoading || iuLoading || ilLoading;

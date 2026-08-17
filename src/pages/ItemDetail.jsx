@@ -138,7 +138,7 @@ export default function ItemDetail() {
     queryFn: () =>
       itemService.listItems({
         category: enrichedItem.category,
-        limit: 200,
+        limit: 1000,
       }),
     enabled: !!enrichedItem?.category,
   });
@@ -217,8 +217,11 @@ export default function ItemDetail() {
 
   const maintenanceHistory = [];
 
+  // `id` comes from useParams() as a string, `i.id` from the API as a
+  // number — compare as strings so the current item is actually excluded
+  // from its own "related items" list instead of always passing the filter.
   const relatedItems = relatedApiItems
-    .filter((i) => i.id !== id)
+    .filter((i) => String(i.id) !== id)
     .slice(0, 6)
     .map((i) => enrichItem(i));
 

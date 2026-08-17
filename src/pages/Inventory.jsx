@@ -19,11 +19,15 @@ import {
   Package,
   ArrowUpDown,
   GripVertical,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import PageTransition from "../components/PageTransition";
 import AddItemModal from "../components/AddItemModal";
+import EditItemModal from "../components/EditItemModal";
+import { ConfirmDialog } from "../components/ui";
 import {
   cn,
   formatDate,
@@ -33,11 +37,16 @@ import {
   truncate,
   getPlaceholderImage,
 } from "../lib/utils";
+import { useAuth } from "../hooks/useAuth";
 import { itemService } from "../services/itemService";
 import { locationService } from "../services/locationService";
 
 const statuses = ["All Statuses", "Available", "Borrowed", "Retired"];
-const conditions = ["All Conditions", "Excellent", "Good", "Fair", "Poor"];
+
+// Backend has no per-item pagination UI here — this fetches "all" items for
+// client-side search/filter/sort. Must stay comfortably above the real
+// catalog size (224 seeded items) or items silently disappear from the page.
+const FETCH_ALL_LIMIT = 1000;
 
 const ITEMS_PER_PAGE = 12;
 
@@ -51,13 +60,15 @@ function Badge({ children, className }) {
 
 export default function Inventory() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
   const [viewMode, setViewMode] = useState("grid");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All Categories");
   const [locationFilter, setLocationFilter] = useState("All Locations");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
-  const [conditionFilter, setConditionFilter] = useState("All Conditions");
   const [sortBy, setSortBy] = useState("name");
   const [sortDir, setSortDir] = useState("asc");
   const [page, setPage] = useState(1);
@@ -66,6 +77,8 @@ export default function Inventory() {
   const debounceRef = useRef(null);
   const [showFilters, setShowFilters] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const {
     data: apiItems = [],
@@ -73,12 +86,30 @@ export default function Inventory() {
     isError: itemsError,
   } = useQuery({
     queryKey: ["items"],
-    queryFn: () => itemService.listItems({ limit: 200 }),
+    queryFn: () => itemService.listItems({ limit: FETCH_ALL_LIMIT }),
   });
 
   const { data: locationList = [] } = useQuery({
     queryKey: ["locations"],
     queryFn: locationService.listLocations,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => itemService.deleteItem(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["items"] });
+      queryClient.invalidateQueries({ queryKey: ["stats-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["stats-lowstock"] });
+      toast.success("Item deleted");
+      setDeleteTarget(null);
+      setSelectedItems((prev) => {
+        if (!deleteTarget) return prev;
+        const next = new Set(prev);
+        next.delete(deleteTarget.id);
+        return next;
+      });
+    },
+    onError: (err) => toast.error(err.message || "Failed to delete item"),
   });
 
   useEffect(() => {
@@ -134,7 +165,7 @@ export default function Inventory() {
   }, [locationList]);
 
   const filteredItems = useMemo(() => {
-    let result = [...enrichedItems].filter((item) => item.status !== "retired");
+    let result = [...enrichedItems];
 
     if (debouncedSearch) {
       const q = debouncedSearch.toLowerCase();
@@ -156,14 +187,14 @@ export default function Inventory() {
         (item) => locationMap[item.locationId] === locationFilter,
       );
     }
-    if (statusFilter !== "All Statuses") {
+    if (statusFilter === "All Statuses") {
+      // Retired items are hidden by default — the "All Statuses" option
+      // means "everything currently in active circulation", not literally
+      // every row. Pick the explicit "Retired" filter to see those.
+      result = result.filter((item) => item.status !== "retired");
+    } else {
       result = result.filter(
         (item) => item.status === statusFilter.toLowerCase().replace(" ", "-"),
-      );
-    }
-    if (conditionFilter !== "All Conditions") {
-      result = result.filter(
-        (item) => item.condition === conditionFilter.toLowerCase(),
       );
     }
 
@@ -198,7 +229,6 @@ export default function Inventory() {
     categoryFilter,
     locationFilter,
     statusFilter,
-    conditionFilter,
     sortBy,
     sortDir,
     locationMap,
@@ -252,7 +282,6 @@ export default function Inventory() {
     setCategoryFilter("All Categories");
     setLocationFilter("All Locations");
     setStatusFilter("All Statuses");
-    setConditionFilter("All Conditions");
     setSortBy("name");
     setSortDir("asc");
     setPage(1);
@@ -262,7 +291,6 @@ export default function Inventory() {
     categoryFilter !== "All Categories" ||
     locationFilter !== "All Locations" ||
     statusFilter !== "All Statuses" ||
-    conditionFilter !== "All Conditions" ||
     debouncedSearch !== "";
 
   if (itemsLoading) {
@@ -421,7 +449,7 @@ export default function Inventory() {
               className="overflow-hidden"
             >
               <div className="card p-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   <div>
                     <label className="label">Category</label>
                     <select
@@ -471,23 +499,6 @@ export default function Inventory() {
                       {statuses.map((s) => (
                         <option key={s} value={s}>
                           {s}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="label">Condition</label>
-                    <select
-                      value={conditionFilter}
-                      onChange={(e) => {
-                        setConditionFilter(e.target.value);
-                        setPage(1);
-                      }}
-                      className="input"
-                    >
-                      {conditions.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
                         </option>
                       ))}
                     </select>
@@ -689,16 +700,46 @@ export default function Inventory() {
                         <span className="text-xs text-gray-400 flex items-center gap-1">
                           <QrCode className="h-3 w-3" /> {item.qrCode}
                         </span>
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            navigate('/borrow', { state: { selectedItem: item } });
-                          }}
-                          className="btn btn-primary text-xs px-3 py-1.5 h-8"
-                        >
-                          Borrow
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          {isAdmin && (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setEditingItem(item);
+                                }}
+                                className="btn btn-outline p-1.5 h-8 w-8 min-h-0"
+                                aria-label={`Edit ${item.name}`}
+                                title="Edit item"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setDeleteTarget(item);
+                                }}
+                                className="btn btn-outline p-1.5 h-8 w-8 min-h-0 text-red-500 hover:bg-red-50 hover:border-red-200"
+                                aria-label={`Delete ${item.name}`}
+                                title="Delete item"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              navigate('/borrow', { state: { selectedItem: item } });
+                            }}
+                            className="btn btn-primary text-xs px-3 py-1.5 h-8"
+                          >
+                            Borrow
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </Link>
@@ -868,6 +909,26 @@ export default function Inventory() {
                                 )}
                               />
                             </button>
+                            {isAdmin && (
+                              <>
+                                <button
+                                  onClick={() => setEditingItem(item)}
+                                  className="btn btn-ghost p-2"
+                                  aria-label={`Edit ${item.name}`}
+                                  title="Edit item"
+                                >
+                                  <Pencil className="h-4 w-4 text-gray-400" />
+                                </button>
+                                <button
+                                  onClick={() => setDeleteTarget(item)}
+                                  className="btn btn-ghost p-2 text-red-500 hover:bg-red-50"
+                                  aria-label={`Delete ${item.name}`}
+                                  title="Delete item"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </>
+                            )}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -941,6 +1002,24 @@ export default function Inventory() {
       </div>
 
       <AddItemModal open={showAddModal} onClose={() => setShowAddModal(false)} />
+      <EditItemModal
+        open={!!editingItem}
+        item={editingItem}
+        onClose={() => setEditingItem(null)}
+      />
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Delete item"
+        message={
+          deleteTarget
+            ? `Remove "${deleteTarget.name}" from the inventory? It will be hidden from listings but its borrow history is kept.`
+            : ""
+        }
+        confirmLabel={deleteMutation.isPending ? "Deleting..." : "Delete"}
+        variant="danger"
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+      />
     </PageTransition>
   );
 }
