@@ -21,6 +21,7 @@ import {
   ArrowUpDown,
 } from "lucide-react";
 import PageTransition from "../components/PageTransition";
+import DatePicker from "../components/DatePicker";
 import {
   cn,
   formatDate,
@@ -224,13 +225,11 @@ function ScheduleModal({ isOpen, onClose, onSchedule, itemsList }) {
               <label className="label" htmlFor="m-date">
                 Scheduled Date *
               </label>
-              <input
+              <DatePicker
                 id="m-date"
-                type="date"
-                className="input"
                 value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-                required
+                onChange={(date) => setForm({ ...form, date })}
+                ariaLabel="Scheduled date"
               />
             </div>
 

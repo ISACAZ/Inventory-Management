@@ -9,11 +9,8 @@ import {
   QrCode as QrCodeIcon,
   Package,
   ArrowLeftRight,
-  AlertTriangle,
   CheckCircle,
   XCircle,
-  Settings,
-  Shield,
   ShieldAlert,
   ShieldCheck,
   UserCheck,
@@ -28,15 +25,7 @@ import {
   ChevronDown,
   RefreshCw,
   Clock,
-  FileText,
-  Wrench,
-  LogIn,
-  LogOut,
   AlertCircle,
-  Copy,
-  ExternalLink,
-  MoreHorizontal,
-  LucideQrCode,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageTransition from "../components/PageTransition";
@@ -51,6 +40,8 @@ import {
 } from "../lib/utils";
 import { statsService } from "../services/statsService";
 import { userService } from "../services/userService";
+import { itemService } from "../services/itemService";
+import { borrowService } from "../services/borrowService";
 import AddItemModal from "../components/AddItemModal";
 
 // ---- Constants ----
@@ -99,141 +90,23 @@ const STATUS_CONFIG = {
   pending: { bg: "bg-amber-50", text: "text-amber-700", label: "Pending" },
 };
 
-const AUDIT_CATEGORIES = [
-  "all",
-  "users",
-  "inventory",
-  "reports",
-  "borrows",
-  "auth",
-  "maintenance",
-  "roles",
-  "system",
-  "qr",
-  "export",
-];
-
-const MOCK_AUDIT_LOGS = [
-  {
-    id: "log1",
-    timestamp: "2026-06-22T14:32:00",
-    user: "Dr. Sarah Chen",
-    action: "User Updated",
-    details: "Changed role for Daniel Wright to Student",
-    category: "users",
-  },
-  {
-    id: "log2",
-    timestamp: "2026-06-22T13:15:00",
-    user: "James Rodriguez",
-    action: "Item Created",
-    details: "Added new item: Spectrophotometer UV-2600",
-    category: "inventory",
-  },
-  {
-    id: "log3",
-    timestamp: "2026-06-22T11:45:00",
-    user: "Dr. Sarah Chen",
-    action: "Report Generated",
-    details: "Generated Inventory Report (PDF)",
-    category: "reports",
-  },
-  {
-    id: "log4",
-    timestamp: "2026-06-22T10:20:00",
-    user: "Prof. Emily Watson",
-    action: "Borrow Approved",
-    details: "Approved borrow request for PCR Thermal Cycler",
-    category: "borrows",
-  },
-  {
-    id: "log5",
-    timestamp: "2026-06-22T09:00:00",
-    user: "Alex Thompson",
-    action: "Login",
-    details: "Successful login from Chrome on Windows",
-    category: "auth",
-  },
-  {
-    id: "log6",
-    timestamp: "2026-06-21T16:30:00",
-    user: "James Rodriguez",
-    action: "Maintenance Scheduled",
-    details: "Scheduled calibration for Analytical Balance",
-    category: "maintenance",
-  },
-  {
-    id: "log7",
-    timestamp: "2026-06-21T14:10:00",
-    user: "Dr. Sarah Chen",
-    action: "Role Updated",
-    details: "Modified Lab Assistant permissions",
-    category: "roles",
-  },
-  {
-    id: "log8",
-    timestamp: "2026-06-21T11:00:00",
-    user: "System",
-    action: "Backup Created",
-    details: "Automated daily backup completed",
-    category: "system",
-  },
-  {
-    id: "log9",
-    timestamp: "2026-06-21T09:30:00",
-    user: "Laura Kim",
-    action: "QR Generated",
-    details: "Generated QR code for item: Centrifuge Eppendorf",
-    category: "qr",
-  },
-  {
-    id: "log10",
-    timestamp: "2026-06-21T08:00:00",
-    user: "Daniel Wright",
-    action: "Login Failed",
-    details: "Failed login attempt - account disabled",
-    category: "auth",
-  },
-  {
-    id: "log11",
-    timestamp: "2026-06-20T15:20:00",
-    user: "Dr. Sarah Chen",
-    action: "Data Exported",
-    details: "Exported all inventory data as CSV",
-    category: "export",
-  },
-  {
-    id: "log12",
-    timestamp: "2026-06-20T13:00:00",
-    user: "Prof. Emily Watson",
-    action: "Item Reserved",
-    details: "Reserved Microscope Olympus BX53 for BIOL 201",
-    category: "inventory",
-  },
-];
+// The backend has no dedicated audit-log table (no such model in
+// CLAUDE.md's domain: Item / BorrowRecord / User / Location only) — building
+// a real one (who-did-what-when for every admin action: user edits, role
+// changes, logins, item CRUD...) needs a new table + write hooks in every
+// service and is a real schema/scope decision, not something to invent
+// silently here.
+//
+// What IS real, already-recorded activity: BorrowRecord. Every borrow and
+// return is a genuine timestamped event tied to a user and an item, so this
+// tab is built entirely from GET /transactions instead of fabricated log
+// entries — no mock data, no invented users.
+const AUDIT_CATEGORIES = ["all", "borrowed", "returned", "overdue"];
 
 const LOG_ACTION_ICONS = {
-  "User Updated": { icon: Edit, color: "bg-blue-50 text-blue-600" },
-  "Item Created": { icon: Plus, color: "bg-green-50 text-green-600" },
-  "Report Generated": { icon: FileText, color: "bg-purple-50 text-purple-600" },
-  "Borrow Approved": {
-    icon: CheckCircle,
-    color: "bg-primary-50 text-primary-600",
-  },
-  Login: { icon: LogIn, color: "bg-blue-50 text-blue-600" },
-  "Login Failed": { icon: AlertCircle, color: "bg-red-50 text-red-600" },
-  "Maintenance Scheduled": {
-    icon: Wrench,
-    color: "bg-amber-50 text-amber-600",
-  },
-  "Role Updated": { icon: Shield, color: "bg-indigo-50 text-indigo-600" },
-  "Backup Created": { icon: Download, color: "bg-green-50 text-green-600" },
-  "QR Generated": { icon: QrCodeIcon, color: "bg-amber-50 text-amber-600" },
-  "Data Exported": {
-    icon: ExternalLink,
-    color: "bg-purple-50 text-purple-600",
-  },
-  "Item Reserved": { icon: Package, color: "bg-primary-50 text-primary-600" },
+  "Item Borrowed": { icon: ArrowLeftRight, color: "bg-blue-50 text-blue-600" },
+  "Item Returned": { icon: CheckCircle, color: "bg-green-50 text-green-600" },
+  Overdue: { icon: AlertCircle, color: "bg-red-50 text-red-600" },
 };
 
 // ---- Skeleton ----
@@ -375,13 +248,25 @@ export default function Admin() {
     queryFn: () => userService.listUsers({ limit: FETCH_ALL_LIMIT }),
   });
 
-  // NOTE: this used to also fetch the full item list into an `itemsList`
-  // variable that was never read anywhere — it just added an extra 200-item
-  // network request and gated page load/error state on a query whose result
-  // was thrown away. The "Total Items" stat below already comes from
-  // `summary.total_items` (a real backend aggregate), so it was removed.
-  const isLoading = summaryLoading || usersLoading;
-  const hasError = summaryError || usersError;
+  // Items + transactions — used to build the Audit Logs tab from real
+  // BorrowRecord data (see AUDIT_CATEGORIES comment below), not to compute
+  // any of the Overview stats (those come from statsService.getSummary).
+  const { data: apiItems = [] } = useQuery({
+    queryKey: ["admin-items"],
+    queryFn: () => itemService.listItems({ limit: FETCH_ALL_LIMIT }),
+  });
+
+  const {
+    data: apiTransactions = [],
+    isLoading: txnLoading,
+    isError: txnError,
+  } = useQuery({
+    queryKey: ["admin-transactions"],
+    queryFn: () => borrowService.listTransactions({ limit: FETCH_ALL_LIMIT }),
+  });
+
+  const isLoading = summaryLoading || usersLoading || txnLoading;
+  const hasError = summaryError || usersError || txnError;
 
   // Mutations for user management
   const updateUserMutation = useMutation({
@@ -436,8 +321,67 @@ export default function Admin() {
     return result;
   }, [apiUsers, userStatusFilter, userSearch]);
 
+  const userMap = useMemo(() => {
+    const map = {};
+    apiUsers.forEach((u) => {
+      map[u.id] = u.full_name || u.email;
+    });
+    return map;
+  }, [apiUsers]);
+
+  const itemMap = useMemo(() => {
+    const map = {};
+    apiItems.forEach((i) => {
+      map[i.id] = i.name;
+    });
+    return map;
+  }, [apiItems]);
+
+  // Derive audit-log rows from real BorrowRecord transactions: one entry per
+  // borrow event, plus a second entry for the return if it's happened, plus
+  // an "Overdue" entry for anything still borrowed past its due date.
+  const auditLogs = useMemo(() => {
+    const now = new Date();
+    const rows = [];
+    apiTransactions.forEach((txn) => {
+      const userName = userMap[txn.user_id] || `User #${txn.user_id}`;
+      const itemName = itemMap[txn.item_id] || `Item #${txn.item_id}`;
+      rows.push({
+        id: `${txn.id}-borrowed`,
+        timestamp: txn.borrowed_at,
+        action: "Item Borrowed",
+        category: "borrowed",
+        user: userName,
+        item: itemName,
+        detail: `${itemName} × ${txn.quantity}${txn.note ? ` — ${txn.note}` : ""}`,
+      });
+      if (txn.status === "returned" && txn.returned_at) {
+        rows.push({
+          id: `${txn.id}-returned`,
+          timestamp: txn.returned_at,
+          action: "Item Returned",
+          category: "returned",
+          user: userName,
+          item: itemName,
+          detail: `${itemName} × ${txn.quantity}${txn.note ? ` — ${txn.note}` : ""}`,
+        });
+      } else if (txn.status === "borrowed" && txn.due_date && new Date(txn.due_date) < now) {
+        rows.push({
+          id: `${txn.id}-overdue`,
+          timestamp: txn.due_date,
+          action: "Overdue",
+          category: "overdue",
+          user: userName,
+          item: itemName,
+          detail: `${itemName} × ${txn.quantity} — due ${formatDate(txn.due_date)}, not yet returned`,
+        });
+      }
+    });
+    return rows.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  }, [apiTransactions, userMap, itemMap]);
+
   const filteredAuditLogs = useMemo(() => {
-    let result = [...MOCK_AUDIT_LOGS];
+    let result = [...auditLogs];
     if (auditCategory !== "all") {
       result = result.filter((log) => log.category === auditCategory);
     }
@@ -447,11 +391,11 @@ export default function Admin() {
         (log) =>
           log.user.toLowerCase().includes(q) ||
           log.action.toLowerCase().includes(q) ||
-          log.details.toLowerCase().includes(q),
+          log.detail.toLowerCase().includes(q),
       );
     }
     return result;
-  }, [auditCategory, auditSearch]);
+  }, [auditLogs, auditCategory, auditSearch]);
 
   const handleDisableUser = (user) => {
     const makeActive = !user.is_active;
@@ -938,7 +882,7 @@ export default function Admin() {
                               User
                             </th>
                             <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">
-                              Details
+                              Item
                             </th>
                             <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">
                               Timestamp
@@ -979,7 +923,7 @@ export default function Admin() {
                                   {log.user}
                                 </td>
                                 <td className="px-5 py-3.5 text-sm text-gray-500 max-w-xs">
-                                  {truncate(log.details, 60)}
+                                  {truncate(log.detail, 60)}
                                 </td>
                                 <td className="px-5 py-3.5 text-sm text-gray-500 text-right whitespace-nowrap">
                                   {formatDate(log.timestamp)}

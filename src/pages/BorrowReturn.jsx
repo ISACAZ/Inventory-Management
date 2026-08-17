@@ -27,6 +27,7 @@ import {
   Info,
 } from "lucide-react";
 import PageTransition from "../components/PageTransition";
+import DatePicker from "../components/DatePicker";
 import {
   cn,
   formatDate,
@@ -304,11 +305,11 @@ function BorrowTab({ currentUser, items, borrowMutation, preselectedItem }) {
 
               <div>
                 <label className="label">Expected Return Date</label>
-                <input
-                  type="date"
-                  className="input"
+                <DatePicker
                   value={expectedReturn}
-                  onChange={(e) => setExpectedReturn(e.target.value)}
+                  onChange={setExpectedReturn}
+                  min={new Date().toISOString().split("T")[0]}
+                  ariaLabel="Expected return date"
                 />
               </div>
 

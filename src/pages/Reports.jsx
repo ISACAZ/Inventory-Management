@@ -24,6 +24,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import PageTransition from "../components/PageTransition";
+import DatePicker from "../components/DatePicker";
 import {
   cn,
   formatDate,
@@ -438,20 +439,22 @@ export default function Reports() {
           <div className="flex items-center gap-3 flex-wrap">
             <Calendar className="h-5 w-5 text-gray-400 flex-shrink-0" />
             <div className="flex items-center gap-2">
-              <input
-                type="date"
+              <DatePicker
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="input w-auto min-h-[40px] px-3 py-1.5 text-sm"
-                aria-label="Start date"
+                onChange={setStartDate}
+                max={endDate}
+                clearable={false}
+                className="w-40 min-h-[40px] px-3 py-1.5 text-sm"
+                ariaLabel="Start date"
               />
               <span className="text-gray-400 text-sm">to</span>
-              <input
-                type="date"
+              <DatePicker
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="input w-auto min-h-[40px] px-3 py-1.5 text-sm"
-                aria-label="End date"
+                onChange={setEndDate}
+                min={startDate}
+                clearable={false}
+                className="w-40 min-h-[40px] px-3 py-1.5 text-sm"
+                ariaLabel="End date"
               />
             </div>
           </div>
