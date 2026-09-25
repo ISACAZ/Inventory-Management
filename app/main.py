@@ -12,6 +12,7 @@ from app.api.auth import router as auth_router
 from app.api.borrow import router as borrow_router
 from app.api.items import router as items_router
 from app.api.locations import router as locations_router
+from app.api.reports import router as reports_router
 from app.api.stats import router as stats_router
 from app.api.users import router as users_router
 from app.config import settings
@@ -66,6 +67,33 @@ def _run_migrations(db):
         db.rollback()
         print(f"Migration note (due_date): {exc}")
 
+    # ── Borrow approval workflow ────────────────────────────
+    _migrate_borrow_approval(db, is_sqlite)
+
+
+def _migrate_borrow_approval(db, is_sqlite: bool) -> None:
+    """Add review columns and the pending/rejected enum values (idempotent)."""
+    columns = {
+        "reviewed_by": "INTEGER REFERENCES users(id)",
+        "reviewed_at": "TIMESTAMP",
+        "review_note": "VARCHAR(500)",
+    }
+    try:
+        if is_sqlite:
+            existing = [r[1] for r in db.execute(text("PRAGMA table_info('borrow_records')")).fetchall()]
+            for name, ddl in columns.items():
+                if name not in existing:
+                    db.execute(text(f"ALTER TABLE borrow_records ADD COLUMN {name} {ddl}"))
+        else:
+            for name, ddl in columns.items():
+                db.execute(text(f"ALTER TABLE borrow_records ADD COLUMN IF NOT EXISTS {name} {ddl}"))
+            for value in ("pending", "rejected"):
+                db.execute(text(f"ALTER TYPE borrowstatus ADD VALUE IF NOT EXISTS '{value}'"))
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"Migration note (borrow approval): {exc}")
+
 
 app = FastAPI(title="Laboratory Inventory Management API", lifespan=lifespan)
 
@@ -104,6 +132,7 @@ app.include_router(items_router, prefix="/api")
 app.include_router(locations_router, prefix="/api")
 app.include_router(borrow_router, prefix="/api")
 app.include_router(stats_router, prefix="/api")
+app.include_router(reports_router, prefix="/api")
 
 
 if __name__ == "__main__":
